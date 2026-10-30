@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Popcorn Match
 
-## Getting Started
+Tinder per film e serie: ognuno fa swipe dal suo telefono, i titoli che piacciono a tutti finiscono nella lista da guardare. Niente login e niente database: i voti viaggiano nel link condiviso (`/?c=...`).
 
-First, run the development server:
+## Come funziona
+1. Chi inizia sceglie le piattaforme (Netflix, Prime Video, RaiPlay…) e se guardare film, serie o tutto, poi fa swipe.
+2. Manda il link agli altri. Il link contiene i filtri e i suoi "mi piace" (ID TMDB).
+3. Chi apre il link fa swipe sullo stesso tipo di mazzo e vede subito i match; può rimandare il link aggiornato, che contiene i voti di tutti.
 
+## Sviluppo
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # senza chiave parte in modalità demo con un catalogo di esempio
+```
+Per i dati veri crea `.env.local` con:
+```
+TMDB_API_KEY=la_tua_chiave   # "API Key" v3 oppure "Read Access Token" v4
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Pubblicazione su Vercel
+1. Importa il repository su vercel.com → New Project.
+2. In *Environment Variables* aggiungi `TMDB_API_KEY`.
+3. Deploy.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Struttura
+- `src/lib/tmdb.ts` – chiamate a TMDB lato server (la chiave non arriva mai al browser), cache 6 ore
+- `src/lib/code.ts` – formato del codice condiviso nel link
+- `src/lib/demo.ts` – catalogo di esempio
+- `src/app/api/*` – `providers`, `deck`, `details`
+- `src/app/App.tsx` – interfaccia (avvio, swipe, risultati)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dati da [TMDB](https://www.themoviedb.org), disponibilità streaming da JustWatch. Questo prodotto usa l'API di TMDB ma non è approvato né certificato da TMDB.

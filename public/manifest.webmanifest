@@ -1,0 +1,13 @@
+{
+  "name": "Popcorn Match",
+  "short_name": "Popcorn",
+  "description": "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#13111c",
+  "theme_color": "#13111c",
+  "lang": "it",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
