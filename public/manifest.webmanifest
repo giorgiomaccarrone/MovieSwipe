@@ -1,6 +1,6 @@
 {
-  "name": "Popcorn Match",
-  "short_name": "Popcorn",
+  "name": "MovieSwipe",
+  "short_name": "MovieSwipe",
   "description": "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   "start_url": "/",
   "display": "standalone",

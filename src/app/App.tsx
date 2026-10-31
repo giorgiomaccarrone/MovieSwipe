@@ -175,7 +175,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     <>
       <header className="hero">
         <span className="logo" aria-hidden><svg viewBox="0 0 24 24" fill="currentColor"><path d={HEART} /></svg></span>
-        <h1>Popcorn Match</h1>
+        <h1>MovieSwipe</h1>
         <p className="lead">Create una stanza, fate swipe insieme su film e serie. Quando piace a tutti, è un match.</p>
         {flags.demo && <p className="pill warn">Modalità demo: manca la chiave TMDB</p>}
         {!flags.database && <p className="pill warn">Database non collegato: le stanze funzionano solo su questo server</p>}
@@ -563,9 +563,9 @@ function MatchPopup({ t, names, onClose, onList }: { t: Title; names: string[]; 
 function Invite({ code, onClose, onLeave }: { code: string; onClose: () => void; onLeave: () => void }) {
   const [msg, setMsg] = useState("");
   const link = typeof location !== "undefined" ? `${location.origin}/r/${code}` : "";
-  const text = `Scegliamo cosa guardare su Popcorn Match! Entra nella stanza ${code}: ${link}`;
+  const text = `Scegliamo cosa guardare su MovieSwipe! Entra nella stanza ${code}: ${link}`;
   async function share() {
-    try { if (navigator.share) { await navigator.share({ title: "Popcorn Match", text }); return; } } catch { return; }
+    try { if (navigator.share) { await navigator.share({ title: "MovieSwipe", text }); return; } } catch { return; }
     try { await navigator.clipboard.writeText(text); setMsg("Invito copiato"); } catch { setMsg("Copia il link qui sotto"); }
   }
   return (
