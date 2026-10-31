@@ -65,6 +65,14 @@ export default function App({ initialCode }: { initialCode?: string }) {
     } else setBooting(false);
   }, [initialCode]);
 
+  /** Passa a un'altra stanza del telefono senza abbandonare quella attuale */
+  async function switchRoom(code: string) {
+    const known = mem.get<RoomsMem>("pm-rooms", {})[code];
+    if (!known) throw new Error("Questa stanza non è più salvata su questo telefono.");
+    try { enter(await api<Session>(`/api/rooms/${code}/join`, { method: "POST", body: { member: known.member } })); }
+    catch (e) { if ((e as { status?: number }).status === 404) forgetRoom(code); throw e; }
+  }
+
   function enter(s: Session) {
     rememberRoom(s.code, s.member);
     mem.set("pm-name", s.name.replace(/ \d+$/, ""));
@@ -75,7 +83,9 @@ export default function App({ initialCode }: { initialCode?: string }) {
   return (
     <>
       {session ? (
-        <Room session={session} providers={providers} onExit={() => { setSession(null); history.replaceState(null, "", "/"); }} />
+        <Room key={session.code} session={session} providers={providers}
+          onExit={() => { setSession(null); history.replaceState(null, "", "/"); }}
+          onSwitch={switchRoom} />
       ) : (
         <>
           <Ambient src={null} />
@@ -161,6 +171,51 @@ function Filters({ providers, sel, setSel, filter, setFilter, genres, setGenres,
 const activeGenresFor = (genres: string[], filter: TypeFilter) =>
   genres.filter((id) => { const g = genreById.get(id); return !!g && (filter !== "tv" || g.tv.length > 0); });
 
+/* ================= Elenco "Le tue stanze" ================= */
+function RoomRows({ rooms, busy, onOpen, onForget }: {
+  rooms: RoomSummary[]; busy?: boolean; onOpen: (code: string) => void; onForget?: (code: string) => void;
+}) {
+  return (
+    <ul className="rooms">
+      {rooms.map((r) => (
+        <li key={r.code} className="glass room-row">
+          <button className="room-open" onClick={() => onOpen(r.code)} disabled={busy}>
+            <span className="room-badge">{r.code}</span>
+            <span className="room-text">
+              <b>{r.name || `Stanza ${r.code}`}</b>
+              <span className="muted small">
+                {r.members ? r.members.join(", ") : "…"}
+                {r.matches !== undefined && (r.toWatch ? ` · ${r.toWatch} da vedere` : r.matches ? " · tutto visto" : " · ancora nessun match")}
+              </span>
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+          </button>
+          {onForget && (
+            <button className="room-forget" onClick={() => onForget(r.code)} aria-label={`Togli ${r.name || r.code} da questo telefono`}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Riepilogo delle stanze salvate sul telefono (toglie da sole quelle che non esistono più) */
+function useRoomSummaries(exclude?: string) {
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  useEffect(() => {
+    const codes = knownRooms().filter((c) => c !== exclude);
+    if (!codes.length) return;
+    setRooms(codes.map((c) => ({ code: c })));
+    api<{ rooms: RoomSummary[] }>(`/api/rooms/summary?codes=${codes.join(",")}`).then((d) => {
+      d.rooms.filter((r) => r.gone).forEach((r) => forgetRoom(r.code));
+      setRooms(d.rooms.filter((r) => !r.gone));
+    }).catch(() => {});
+  }, [exclude]);
+  return [rooms, setRooms] as const;
+}
+
 /* ================= Home: crea o entra ================= */
 interface RoomSummary { code: string; name?: string | null; members?: string[]; matches?: number; toWatch?: number; gone?: true }
 
@@ -178,20 +233,13 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
   const [info, setInfo] = useState<{ members: string[]; meta: Session["meta"] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  // Le stanze salvate su questo telefono, con quanti match restano da vedere
+  const [rooms, setRooms] = useRoomSummaries();
 
   useEffect(() => {
     setName(mem.get("pm-name", ""));
     const prefs = mem.get<{ providers: number[]; filter: TypeFilter; genres?: string[] } | null>("pm-prefs", null);
     if (prefs) { setSel(prefs.providers); setFilter(prefs.filter); setGenres(prefs.genres ?? []); }
-    // Le stanze salvate su questo telefono, con quanti match restano da vedere
-    const codes = knownRooms();
-    if (!codes.length) return;
-    setRooms(codes.map((c) => ({ code: c })));
-    api<{ rooms: RoomSummary[] }>(`/api/rooms/summary?codes=${codes.join(",")}`).then((d) => {
-      d.rooms.filter((r) => r.gone).forEach((r) => forgetRoom(r.code));
-      setRooms(d.rooms.filter((r) => !r.gone));
-    }).catch(() => {});
   }, []);
   useEffect(() => { if (!sel.length && providers.length && !mem.get("pm-prefs", null)) setSel(providers.slice(0, 4).map((p) => p.id)); }, [providers, sel.length]);
 
@@ -251,27 +299,8 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
       {rooms.length > 0 && (
         <section className="stack-s">
           <span className="lbl">Le tue stanze</span>
-          <ul className="rooms">
-            {rooms.map((r) => (
-              <li key={r.code} className="glass room-row">
-                <button className="room-open" onClick={() => rejoin(r.code)} disabled={busy}>
-                  <span className="room-badge">{r.code}</span>
-                  <span className="room-text">
-                    <b>{r.name || `Stanza ${r.code}`}</b>
-                    <span className="muted small">
-                      {r.members ? r.members.join(", ") : "…"}
-                      {r.matches !== undefined && (r.toWatch ? ` · ${r.toWatch} da vedere` : r.matches ? " · tutto visto" : " · ancora nessun match")}
-                    </span>
-                  </span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-                </button>
-                <button className="room-forget" onClick={() => { forgetRoom(r.code); setRooms((x) => x.filter((y) => y.code !== r.code)); }}
-                  aria-label={`Togli ${r.name || r.code} da questo telefono`}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <RoomRows rooms={rooms} busy={busy} onOpen={rejoin}
+            onForget={(c) => { forgetRoom(c); setRooms((x) => x.filter((y) => y.code !== c)); }} />
         </section>
       )}
 
@@ -338,7 +367,9 @@ const POLL_ACTIVE = 3000;   // mentre si vota: i match arrivano in pochi secondi
 const POLL_IDLE = 12000;    // se nessuno tocca il telefono da 2 minuti: meno richieste, resta tutto gratis
 const IDLE_AFTER = 2 * 60 * 1000;
 
-function Room({ session, providers, onExit }: { session: Session; providers: Provider[]; onExit: () => void }) {
+function Room({ session, providers, onExit, onSwitch }: {
+  session: Session; providers: Provider[]; onExit: () => void; onSwitch: (code: string) => Promise<void>;
+}) {
   const { code, member } = session;
   const [deck, setDeck] = useState<Title[]>(session.deck);
   const [meta, setMeta] = useState<RoomMeta>(session.meta);
@@ -494,7 +525,10 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
       <Ambient src={ambient} />
       <main className="app room">
         <div className="top">
-          <button className="glass pill code-pill" onClick={() => setInvite(true)} aria-label={`${meta.name || "Stanza"} ${code}: invita altre persone`}>
+          <button className="glass round back" onClick={onExit} aria-label="Torna alle tue stanze (resti nella stanza)" title="Le tue stanze">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+          </button>
+          <button className="glass pill code-pill" onClick={() => setInvite(true)} aria-label={`${meta.name || "Stanza"} ${code}: invita, cambia stanza o impostazioni`}>
             <span className="muted room-title">{meta.name || "Stanza"}</span> <b>{code}</b>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
@@ -577,7 +611,7 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
           watched={detail.canVote ? undefined : isWatched(detail.t.key)}
           onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }} />
       )}
-      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)}
+      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)} onSwitch={onSwitch}
         onLeave={() => { setInvite(false); setConfirmLeave(true); }}
         onDelete={() => { setInvite(false); setConfirmDelete(true); }} />}
       {confirmDelete && (
@@ -590,8 +624,8 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
           onDone={(r) => { setDeck(r.deck); setMeta(r.meta); setRound(false); setTab("swipe"); setToast(`Aggiunti ${r.added} titoli nuovi`); poll(); }} />
       )}
       {confirmLeave && (
-        <Confirm title="Vuoi uscire dalla stanza?" text="I tuoi voti verranno cancellati e gli altri potranno fare match senza di te. La stanza sparirà anche da questo telefono."
-          keep="Resta nella stanza" go="Esci" onCancel={() => setConfirmLeave(false)} onConfirm={leaveRoom} />
+        <Confirm title="Abbandonare la stanza?" text="Non farai più parte della stanza: i tuoi voti verranno cancellati e gli altri potranno fare match senza di te. Se vuoi solo passare a un'altra stanza, usa la freccia in alto: i tuoi voti restano."
+          keep="Resta nella stanza" go="Abbandona" onCancel={() => setConfirmLeave(false)} onConfirm={leaveRoom} />
       )}
       {popupTitle && (
         <MatchPopup t={popupTitle} names={members.map((m) => (m.id === member ? "tu" : m.name))}
@@ -765,10 +799,18 @@ function MatchPopup({ t, names, onClose, onList }: { t: Title; names: string[]; 
 }
 
 /* ================= Invito ================= */
-function Invite({ code, roomName, onClose, onLeave, onDelete }: {
+function Invite({ code, roomName, onClose, onLeave, onDelete, onSwitch }: {
   code: string; roomName?: string; onClose: () => void; onLeave: () => void; onDelete: () => void;
+  onSwitch: (code: string) => Promise<void>;
 }) {
   const [msg, setMsg] = useState("");
+  const [others] = useRoomSummaries(code);
+  const [switching, setSwitching] = useState(false);
+  const [switchErr, setSwitchErr] = useState("");
+  async function go(c: string) {
+    setSwitching(true); setSwitchErr("");
+    try { await onSwitch(c); } catch (e) { setSwitchErr((e as Error).message); setSwitching(false); }
+  }
   const link = typeof location !== "undefined" ? `${location.origin}/r/${code}` : "";
   const text = `Scegliamo cosa guardare su Filmetto! Entra nella stanza ${roomName ? `“${roomName}” (${code})` : code}: ${link}`;
   async function share() {
@@ -776,16 +818,24 @@ function Invite({ code, roomName, onClose, onLeave, onDelete }: {
     try { await navigator.clipboard.writeText(text); setMsg("Invito copiato"); } catch { setMsg("Copia il link qui sotto"); }
   }
   return (
-    <SheetFrame label="Invita" onClose={onClose}>
+    <SheetFrame label={roomName || `Stanza ${code}`} onClose={onClose}>
       <div className="invite">
-        <span className="lbl">Codice della stanza</span>
+        {others.length > 0 && (
+          <section className="switcher">
+            <span className="lbl">Passa a un&apos;altra stanza</span>
+            <RoomRows rooms={others} busy={switching} onOpen={go} />
+            {switchErr && <p className="err">{switchErr}</p>}
+            <span className="hint-inline">In questa stanza resti dentro con tutti i tuoi voti.</span>
+          </section>
+        )}
+        <span className="lbl">Invita in {roomName ? `“${roomName}”` : "questa stanza"}</span>
         <div className="code-big" aria-label={code.split("").join(" ")}>{code.split("").map((c, i) => <span key={i}>{c}</span>)}</div>
         <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata. Dal primo match la stanza resta salvata per sempre: segnatevi il codice per rientrare da qualsiasi telefono.</p>
         <button className="btn primary" onClick={share}>Condividi l&apos;invito</button>
         {msg && <p className="small center">{msg}</p>}
         <input type="text" readOnly value={link} aria-label="Link della stanza" onFocus={(e) => e.currentTarget.select()} className="link-field" />
         <div className="danger-zone">
-          <button className="btn danger" onClick={onLeave}>Esci dalla stanza</button>
+          <button className="btn danger" onClick={onLeave}>Abbandona la stanza</button>
           <button className="btn danger" onClick={onDelete}>Elimina la stanza per tutti</button>
         </div>
       </div>

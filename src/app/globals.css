@@ -92,7 +92,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- Swipe ---------- */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .hello { font-size: 17px; font-weight: 600; }
 .progress { font-variant-numeric: tabular-nums; color: var(--muted); }
 .stack { position: relative; height: min(68dvh, 620px); min-height: 440px; }
@@ -254,3 +254,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .segmented.mini.icons .badge { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; font-size: 11px; padding: 0 5px; }
 .round.spacer { visibility: hidden; border: 0; } /* tiene centrati i pulsanti No e Mi piace */
 .danger-zone { display: grid; gap: 4px; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--stroke); }
+
+/* ---------- Cambio stanza ---------- */
+.round.back { flex: none; width: 38px; height: 38px; color: var(--ink); }
+.round.back svg { width: 18px; height: 18px; }
+.top .code-pill { margin-right: auto; }
+.switcher { display: grid; gap: 8px; text-align: left; padding-bottom: 14px; border-bottom: 1px solid var(--stroke); }
