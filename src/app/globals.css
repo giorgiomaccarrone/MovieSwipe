@@ -342,3 +342,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   }
   .sticky-bar.scrolled::after { opacity: 1; }
 }
+
+.pill.install { color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 9px 16px; }
+.pill.install svg { width: 18px; height: 18px; }

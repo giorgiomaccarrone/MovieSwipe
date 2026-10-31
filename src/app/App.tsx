@@ -222,6 +222,22 @@ function useRoomSummaries(exclude?: string) {
   return [rooms, setRooms] as const;
 }
 
+/* ================= Installazione su Android ================= */
+// Chrome su Android avvisa quando il sito si può installare come app: teniamo l'evento
+// per mostrare un pulsante "Installa" (che apre la finestra giusta, non la semplice scorciatoia).
+type InstallEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+function useInstallPrompt() {
+  const [evt, setEvt] = useState<InstallEvent | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => { e.preventDefault(); setEvt(e as InstallEvent); };
+    const done = () => setEvt(null);
+    addEventListener("beforeinstallprompt", on); addEventListener("appinstalled", done);
+    return () => { removeEventListener("beforeinstallprompt", on); removeEventListener("appinstalled", done); };
+  }, []);
+  const install = async () => { if (!evt) return; await evt.prompt(); await evt.userChoice.catch(() => null); setEvt(null); };
+  return { canInstall: !!evt, install };
+}
+
 /* ================= Home: crea o entra ================= */
 interface RoomSummary { code: string; name?: string | null; members?: string[]; matches?: number; toWatch?: number; gone?: true }
 
@@ -241,6 +257,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
   const [error, setError] = useState("");
   // Le stanze salvate su questo telefono, con quanti match restano da vedere
   const [rooms, setRooms] = useRoomSummaries();
+  const { canInstall, install } = useInstallPrompt();
 
   useEffect(() => {
     setName(mem.get("pm-name", ""));
@@ -300,6 +317,12 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
         <p className="lead">Create una stanza e fate swipe insieme su film e serie. Quando una cosa piace a tutti, è match.</p>
         {flags.demo && <p className="pill warn">Modalità demo: manca la chiave TMDB</p>}
         {!flags.database && <p className="pill warn">Database non collegato: le stanze funzionano solo su questo server</p>}
+        {canInstall && (
+          <button className="glass pill install" onClick={install}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+            Installa Filmetto sul telefono
+          </button>
+        )}
       </header>
 
       {rooms.length > 0 && (
