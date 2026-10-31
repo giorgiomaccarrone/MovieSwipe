@@ -9,6 +9,7 @@ import { Redis } from "@upstash/redis";
 export interface KV {
   get(k: string): Promise<string | null>;
   setNX(k: string, v: string, ttl: number): Promise<boolean>;
+  set(k: string, v: string, ttl: number): Promise<void>;
   incr(k: string): Promise<number>;
   expire(k: string, ttl: number): Promise<void>;
   hset(k: string, obj: Record<string, string | number>): Promise<void>;
@@ -42,6 +43,7 @@ function upstash(): KV {
   return {
     get: async (k) => { const v = await r.get<string>(k); return v == null ? null : String(v); },
     setNX: async (k, v, ttl) => (await r.set(k, v, { nx: true, ex: ttl })) === "OK",
+    set: async (k, v, ttl) => { await r.set(k, v, { ex: ttl }); },
     incr: (k) => r.incr(k),
     expire: async (k, ttl) => { await r.expire(k, ttl); },
     hset: async (k, obj) => { await r.hset(k, obj); },
@@ -69,6 +71,7 @@ function memory(): KV {
   return {
     get: async (k) => (m.has(k) ? String(m.get(k)) : null),
     setNX: async (k, v) => { if (m.has(k)) return false; m.set(k, v); return true; },
+    set: async (k, v) => { m.set(k, v); },
     incr: async (k) => { const n = Number(m.get(k) ?? 0) + 1; m.set(k, String(n)); return n; },
     expire: async () => {},
     hset: async (k, obj) => { const h = hash(k); for (const [f, v] of Object.entries(obj)) h.set(f, String(v)); },

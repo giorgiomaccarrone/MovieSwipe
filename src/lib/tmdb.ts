@@ -76,8 +76,9 @@ type Discover = {
 const PAGES = 2; // 20 titoli a pagina, per piattaforma e per tipo
 const MAX_DECK = 80;
 
-export async function getDeck(providerIds: number[], filter: TypeFilter, genreIds: string[] = []): Promise<Title[]> {
-  if (isDemo) return demoDeck(providerIds, filter, genreIds);
+/** `window` = quale blocco di pagine di TMDB usare (0 = le prime 2, 1 = la 3 e la 4…): serve per i "nuovi giri" */
+export async function getDeck(providerIds: number[], filter: TypeFilter, genreIds: string[] = [], window = 0): Promise<Title[]> {
+  if (isDemo) return window === 0 ? demoDeck(providerIds, filter, genreIds) : [];
   const [genres, providers] = await Promise.all([genreMap(), getProviders()]);
   const provName = new Map(providers.map((p) => [p.id, p.name]));
   // Salto i tipi per cui nessuno dei generi scelti esiste (es. "Horror" tra le serie)
@@ -92,7 +93,7 @@ export async function getDeck(providerIds: number[], filter: TypeFilter, genreId
         tmdb<Discover>(`/discover/${type}`, {
           language: LANG, watch_region: REGION, with_watch_providers: pid,
           with_watch_monetization_types: "flatrate", sort_by: "popularity.desc",
-          "vote_count.gte": 50, include_adult: "false", page: i + 1,
+          "vote_count.gte": 50, include_adult: "false", page: window * PAGES + i + 1,
           ...(g ? { with_genres: g.join("|") } : {}), // "|" = basta uno dei generi
         }).then((d) => ({ pid, type, d }), () => null),
       ),

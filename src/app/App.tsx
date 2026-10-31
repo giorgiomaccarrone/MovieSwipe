@@ -5,13 +5,16 @@ import type { Provider, Title, TypeFilter } from "@/lib/types";
 import { GENRES, genreById } from "@/lib/genres";
 
 /* ---------- Tipi delle risposte API ---------- */
+interface RoomMeta { name?: string; providers: number[]; filter: TypeFilter; genres?: string[]; round?: number; deckSize?: number }
 interface Session {
   code: string; member: string; name: string;
-  meta: { providers: number[]; filter: TypeFilter };
-  deck: Title[]; voted: string[]; liked: string[];
+  meta: RoomMeta; deck: Title[]; voted: string[]; liked: string[];
 }
 interface Member { id: string; name: string; seen: number }
-interface RoomState { v: number; members: Member[]; counts: Record<string, number>; matches: { key: string; at: number }[] }
+interface RoomState {
+  v: number; members: Member[]; counts: Record<string, number>; matches: { key: string; at: number }[];
+  watched: Record<string, number>; deckSize: number;
+}
 
 /* ---------- Memoria locale (solo comodità: nome, filtri, stanze in cui sono entrato) ---------- */
 type RoomsMem = Record<string, { member: string; at: number }>;
@@ -19,14 +22,12 @@ const mem = {
   get<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } },
   set(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* non disponibile */ } },
 };
-const DAY = 24 * 60 * 60 * 1000;
+const ROOM_DAYS = 30 * 24 * 60 * 60 * 1000; // come la scadenza delle stanze sul server
 const rememberRoom = (code: string, member: string) => { const r = mem.get<RoomsMem>("pm-rooms", {}); r[code] = { member, at: Date.now() }; mem.set("pm-rooms", r); };
 const forgetRoom = (code: string) => { const r = mem.get<RoomsMem>("pm-rooms", {}); delete r[code]; mem.set("pm-rooms", r); };
-const lastRoom = (): string | null => {
-  const r = mem.get<RoomsMem>("pm-rooms", {});
-  const best = Object.entries(r).filter(([, x]) => Date.now() - x.at < DAY).sort((a, b) => b[1].at - a[1].at)[0];
-  return best ? best[0] : null;
-};
+const knownRooms = (): string[] =>
+  Object.entries(mem.get<RoomsMem>("pm-rooms", {}))
+    .filter(([, x]) => Date.now() - x.at < ROOM_DAYS).sort((a, b) => b[1].at - a[1].at).map(([c]) => c);
 
 async function api<T>(url: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const r = await fetch(url, {
@@ -75,7 +76,7 @@ export default function App({ initialCode }: { initialCode?: string }) {
   return (
     <>
       {session ? (
-        <Room session={session} onExit={() => { setSession(null); history.replaceState(null, "", "/"); }} />
+        <Room session={session} providers={providers} onExit={() => { setSession(null); history.replaceState(null, "", "/"); }} />
       ) : (
         <>
           <Ambient src={null} />
@@ -112,28 +113,87 @@ function Ambient({ src }: { src: string | null }) {
   );
 }
 
+/* ================= Filtri (creazione stanza e nuovo giro) ================= */
+function Filters({ providers, sel, setSel, filter, setFilter, genres, setGenres, emptyText }: {
+  providers: Provider[]; sel: number[]; setSel: (v: number[]) => void;
+  filter: TypeFilter; setFilter: (f: TypeFilter) => void;
+  genres: string[]; setGenres: (g: string[]) => void; emptyText?: string;
+}) {
+  const toggle = (id: number) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
+  // Alcuni generi esistono solo per i film (es. Horror, Romantico): li nascondo se si guardano solo serie
+  const shownGenres = GENRES.filter((g) => filter !== "tv" || g.tv.length > 0);
+  const active = activeGenresFor(genres, filter);
+  const toggleGenre = (id: string) => setGenres(active.includes(id) ? active.filter((x) => x !== id) : [...active, id]);
+  return (<>
+    <div className="field">
+      <span className="lbl">Piattaforme</span>
+      <div className="chips">
+        {providers.map((p) => (
+          <button key={p.id} type="button" className={"chip prov" + (p.logo ? "" : " nologo")} aria-pressed={sel.includes(p.id)} onClick={() => toggle(p.id)}>
+            {p.logo && <img src={p.logo} alt="" width={24} height={24} />}{p.name}
+          </button>
+        ))}
+        {!providers.length && <span className="muted small">{emptyText || "Carico le piattaforme…"}</span>}
+      </div>
+    </div>
+    <div className="field">
+      <span className="lbl">Cosa guardate</span>
+      <div className="segmented" role="radiogroup" aria-label="Cosa guardate">
+        {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
+          <button key={f} type="button" role="radio" aria-checked={filter === f} onClick={() => setFilter(f)}>{TYPE_LABEL[f]}</button>
+        ))}
+      </div>
+    </div>
+    <div className="field">
+      <div className="lbl-row">
+        <span className="lbl">Generi</span>
+        {active.length > 0
+          ? <button type="button" className="mini-link" onClick={() => setGenres([])}>Tutti i generi</button>
+          : <span className="hint-inline">Nessuno scelto = tutti</span>}
+      </div>
+      <div className="chips">
+        {shownGenres.map((g) => (
+          <button key={g.id} type="button" className="chip nologo small-chip" aria-pressed={active.includes(g.id)} onClick={() => toggleGenre(g.id)}>{g.label}</button>
+        ))}
+      </div>
+    </div>
+  </>);
+}
+const activeGenresFor = (genres: string[], filter: TypeFilter) =>
+  genres.filter((id) => { const g = genreById.get(id); return !!g && (filter !== "tv" || g.tv.length > 0); });
+
 /* ================= Home: crea o entra ================= */
+interface RoomSummary { code: string; name?: string | null; members?: string[]; matches?: number; toWatch?: number; gone?: true }
+
 function Home({ providers, flags, initialCode, bootError, onEnter }: {
   providers: Provider[]; flags: { demo: boolean; database: boolean }; initialCode?: string; bootError: string;
   onEnter: (s: Session) => void;
 }) {
   const [mode, setMode] = useState<"create" | "join">(initialCode ? "join" : "create");
   const [name, setName] = useState("");
+  const [roomName, setRoomName] = useState("");
   const [sel, setSel] = useState<number[]>([]);
   const [filter, setFilter] = useState<TypeFilter>("all");
   const [genres, setGenres] = useState<string[]>([]);
   const [code, setCode] = useState(initialCode ?? "");
-  const [info, setInfo] = useState<{ members: string[]; meta: { providers: number[]; filter: TypeFilter; genres?: string[] } } | null>(null);
+  const [info, setInfo] = useState<{ members: string[]; meta: Session["meta"] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [resume, setResume] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
 
   useEffect(() => {
     setName(mem.get("pm-name", ""));
     const prefs = mem.get<{ providers: number[]; filter: TypeFilter; genres?: string[] } | null>("pm-prefs", null);
     if (prefs) { setSel(prefs.providers); setFilter(prefs.filter); setGenres(prefs.genres ?? []); }
-    const last = lastRoom(); if (last && last !== initialCode) setResume(last);
-  }, [initialCode]);
+    // Le stanze salvate su questo telefono, con quanti match restano da vedere
+    const codes = knownRooms();
+    if (!codes.length) return;
+    setRooms(codes.map((c) => ({ code: c })));
+    api<{ rooms: RoomSummary[] }>(`/api/rooms/summary?codes=${codes.join(",")}`).then((d) => {
+      d.rooms.filter((r) => r.gone).forEach((r) => forgetRoom(r.code));
+      setRooms(d.rooms.filter((r) => !r.gone));
+    }).catch(() => {});
+  }, []);
   useEffect(() => { if (!sel.length && providers.length && !mem.get("pm-prefs", null)) setSel(providers.slice(0, 4).map((p) => p.id)); }, [providers, sel.length]);
 
   // Anteprima della stanza dell'invito
@@ -142,18 +202,14 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     setInfo(null);
     if (cleanCode.length !== 4) return;
     let alive = true;
-    api<{ members: string[]; meta: { providers: number[]; filter: TypeFilter; genres?: string[] } }>(`/api/rooms/${cleanCode}`)
+    api<{ members: string[]; meta: Session["meta"] }>(`/api/rooms/${cleanCode}`)
       .then((d) => alive && (setInfo(d), setError("")))
       .catch((e) => alive && setError(e.message));
     return () => { alive = false; };
   }, [cleanCode]);
 
   const provName = (id: number) => providers.find((p) => p.id === id)?.name;
-  const toggle = (id: number) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
-  // Alcuni generi esistono solo per i film (es. Horror, Romantico): li nascondo se si guardano solo serie
-  const shownGenres = GENRES.filter((g) => filter !== "tv" || g.tv.length > 0);
-  const activeGenres = genres.filter((id) => shownGenres.some((g) => g.id === id));
-  const toggleGenre = (id: string) => setGenres(activeGenres.includes(id) ? activeGenres.filter((x) => x !== id) : [...activeGenres, id]);
+  const activeGenres = activeGenresFor(genres, filter);
 
   async function submit() {
     if (!name.trim()) return setError("Scrivi il tuo nome, così gli altri sanno chi sei.");
@@ -161,7 +217,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     try {
       if (mode === "create") {
         mem.set("pm-prefs", { providers: sel, filter, genres: activeGenres });
-        onEnter(await api<Session>("/api/rooms", { method: "POST", body: { name, providers: sel, filter, genres: activeGenres } }));
+        onEnter(await api<Session>("/api/rooms", { method: "POST", body: { name, roomName, providers: sel, filter, genres: activeGenres } }));
       } else {
         if (cleanCode.length !== 4) throw new Error("Il codice della stanza ha 4 caratteri.");
         onEnter(await api<Session>(`/api/rooms/${cleanCode}/join`, { method: "POST", body: { name } }));
@@ -174,7 +230,13 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     if (!known) return;
     setBusy(true);
     try { onEnter(await api<Session>(`/api/rooms/${c}/join`, { method: "POST", body: { member: known.member } })); }
-    catch (e) { forgetRoom(c); setResume(null); setError((e as Error).message); setBusy(false); }
+    catch (e) { forgetRoom(c); setRooms((r) => r.filter((x) => x.code !== c)); setError((e as Error).message); setBusy(false); }
+  }
+
+  async function claim(who: string) {
+    setBusy(true); setError("");
+    try { onEnter(await api<Session>(`/api/rooms/${cleanCode}/claim`, { method: "POST", body: { name: who } })); }
+    catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
   return (
@@ -187,11 +249,31 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
         {!flags.database && <p className="pill warn">Database non collegato: le stanze funzionano solo su questo server</p>}
       </header>
 
-      {resume && (
-        <button className="glass panel resume" onClick={() => rejoin(resume)} disabled={busy}>
-          <span><span className="lbl">Partita in corso</span><b>Rientra nella stanza {resume}</b></span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-        </button>
+      {rooms.length > 0 && (
+        <section className="stack-s">
+          <span className="lbl">Le tue stanze</span>
+          <ul className="rooms">
+            {rooms.map((r) => (
+              <li key={r.code} className="glass room-row">
+                <button className="room-open" onClick={() => rejoin(r.code)} disabled={busy}>
+                  <span className="room-badge">{r.code}</span>
+                  <span className="room-text">
+                    <b>{r.name || `Stanza ${r.code}`}</b>
+                    <span className="muted small">
+                      {r.members ? r.members.join(", ") : "…"}
+                      {r.matches !== undefined && (r.toWatch ? ` · ${r.toWatch} da vedere` : r.matches ? " · tutto visto" : " · ancora nessun match")}
+                    </span>
+                  </span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+                <button className="room-forget" onClick={() => { forgetRoom(r.code); setRooms((x) => x.filter((y) => y.code !== r.code)); }}
+                  aria-label={`Togli ${r.name || r.code} da questo telefono`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <form className="glass panel" onSubmit={(e) => { e.preventDefault(); submit(); }}>
@@ -200,58 +282,48 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
           <button type="button" role="tab" aria-selected={mode === "join"} aria-checked={mode === "join"} onClick={() => { setMode("join"); setError(""); }}>Ho un codice</button>
         </div>
 
-        <div className="field">
-          <label className="lbl" htmlFor="name">Il tuo nome</label>
-          <input id="name" type="text" maxLength={16} autoComplete="given-name" autoCapitalize="words" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-
-        {mode === "create" ? (<>
-          <div className="field">
-            <span className="lbl">Piattaforme</span>
-            <div className="chips">
-              {providers.map((p) => (
-                <button key={p.id} type="button" className={"chip prov" + (p.logo ? "" : " nologo")} aria-pressed={sel.includes(p.id)} onClick={() => toggle(p.id)}>
-                  {p.logo && <img src={p.logo} alt="" width={24} height={24} />}{p.name}
-                </button>
-              ))}
-              {!providers.length && <span className="muted small">{bootError || "Carico le piattaforme…"}</span>}
-            </div>
-          </div>
-          <div className="field">
-            <span className="lbl">Cosa guardate</span>
-            <div className="segmented" role="radiogroup" aria-label="Cosa guardate">
-              {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
-                <button key={f} type="button" role="radio" aria-checked={filter === f} onClick={() => setFilter(f)}>{TYPE_LABEL[f]}</button>
-              ))}
-            </div>
-          </div>
-          <div className="field">
-            <div className="lbl-row">
-              <span className="lbl">Generi</span>
-              {activeGenres.length > 0
-                ? <button type="button" className="mini-link" onClick={() => setGenres([])}>Tutti i generi</button>
-                : <span className="hint-inline">Nessuno scelto = tutti</span>}
-            </div>
-            <div className="chips">
-              {shownGenres.map((g) => (
-                <button key={g.id} type="button" className="chip nologo small-chip" aria-pressed={activeGenres.includes(g.id)} onClick={() => toggleGenre(g.id)}>{g.label}</button>
-              ))}
-            </div>
-          </div>
-        </>) : (
+        {mode === "join" && (
           <div className="field">
             <label className="lbl" htmlFor="code">Codice della stanza</label>
             <input id="code" type="text" className="code-input" inputMode="text" autoCapitalize="characters" autoComplete="off" maxLength={4}
               value={cleanCode} onChange={(e) => setCode(e.target.value)} />
             {info && (
               <p className="muted small">
-                Dentro: <b className="ink">{info.members.join(", ") || "nessuno"}</b> · {TYPE_LABEL[info.meta.filter]} su{" "}
-                {info.meta.providers.map(provName).filter(Boolean).join(", ") || "piattaforme scelte"}
+                {info.meta.name ? <><b className="ink">{info.meta.name}</b> · </> : null}
+                {TYPE_LABEL[info.meta.filter]} su {info.meta.providers.map(provName).filter(Boolean).join(", ") || "piattaforme scelte"}
                 {info.meta.genres?.length ? <> · {info.meta.genres.map((id) => genreById.get(id)?.label).filter(Boolean).join(", ")}</> : null}
               </p>
             )}
           </div>
         )}
+
+        {mode === "join" && info && info.members.length > 0 && (
+          <div className="field claim">
+            <span className="lbl">Eri già dentro? Tocca il tuo nome</span>
+            <div className="chips">
+              {info.members.map((m) => (
+                <button key={m} type="button" className="chip nologo small-chip" onClick={() => claim(m)} disabled={busy}>{m}</button>
+              ))}
+            </div>
+            <span className="hint-inline">Riprendi i tuoi voti anche da un altro telefono. Se sei nuovo, scrivi il tuo nome qui sotto.</span>
+          </div>
+        )}
+
+        <div className="field">
+          <label className="lbl" htmlFor="name">{mode === "join" && info?.members.length ? "Sei nuovo? Il tuo nome" : "Il tuo nome"}</label>
+          <input id="name" type="text" maxLength={16} autoComplete="given-name" autoCapitalize="words" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+
+        {mode === "create" && (<>
+          <div className="field">
+            <div className="lbl-row">
+              <label className="lbl" htmlFor="roomname">Nome della stanza</label>
+              <span className="hint-inline">Facoltativo</span>
+            </div>
+            <input id="roomname" type="text" maxLength={32} autoComplete="off" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
+          </div>
+          <Filters {...{ providers, sel, setSel, filter, setFilter, genres, setGenres }} emptyText={bootError} />
+        </>)}
 
         {error && <p className="err">{error}</p>}
         <button className="btn primary" disabled={busy || (mode === "create" ? !sel.length : cleanCode.length !== 4)}>
@@ -263,29 +335,45 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
 }
 
 /* ================= Stanza ================= */
-function Room({ session, onExit }: { session: Session; onExit: () => void }) {
-  const { code, member, deck } = session;
+const POLL_ACTIVE = 3000;   // mentre si vota: i match arrivano in pochi secondi
+const POLL_IDLE = 12000;    // se nessuno tocca il telefono da 2 minuti: meno richieste, resta tutto gratis
+const IDLE_AFTER = 2 * 60 * 1000;
+
+function Room({ session, providers, onExit }: { session: Session; providers: Provider[]; onExit: () => void }) {
+  const { code, member } = session;
+  const [deck, setDeck] = useState<Title[]>(session.deck);
+  const [meta, setMeta] = useState<RoomMeta>(session.meta);
   const byKey = useMemo(() => new Map(deck.map((t) => [t.key, t])), [deck]);
   const [voted, setVoted] = useState<Set<string>>(() => new Set(session.voted));
   const [history_, setHistory] = useState<string[]>([]);
   const [state, setState] = useState<RoomState | null>(null);
+  const [watchedLocal, setWatchedLocal] = useState<Record<string, boolean>>({});
   const [tab, setTab] = useState<"swipe" | "list">("swipe");
   const [detail, setDetail] = useState<{ t: Title; canVote: boolean } | null>(null);
   const [invite, setInvite] = useState(false);
+  const [round, setRound] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [popups, setPopups] = useState<string[]>([]);
   const [toast, setToast] = useState("");
   const [gone, setGone] = useState("");
   const seenMatches = useRef<Set<string> | null>(null);
   const vRef = useRef(0);
+  const deckLen = useRef(deck.length);
+  deckLen.current = deck.length;
+  const lastActive = useRef(Date.now());
 
-  /* --- aggiornamento ogni 2 secondi (solo se la pagina è visibile) --- */
+  /* --- aggiornamenti: una lettura leggera che dice solo "è cambiato qualcosa?" --- */
   const poll = useCallback(async () => {
     try {
       const d = await api<RoomState | { v: number; same: true }>(`/api/rooms/${code}/state?v=${vRef.current}`);
       if ("same" in d) return;
       vRef.current = d.v;
       setState(d);
+      setWatchedLocal({});
+      // Qualcuno ha avviato un nuovo giro: scarico il mazzo aggiornato
+      if (d.deckSize && d.deckSize !== deckLen.current) {
+        api<{ meta: RoomMeta; deck: Title[] }>(`/api/rooms/${code}/deck`).then((r) => { setDeck(r.deck); setMeta(r.meta); }).catch(() => {});
+      }
       const keys = d.matches.map((m) => m.key);
       if (!seenMatches.current) { seenMatches.current = new Set(keys); return; } // all'ingresso niente popup per i match vecchi
       const fresh = keys.filter((k) => !seenMatches.current!.has(k));
@@ -300,11 +388,23 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
   }, [code]);
 
   useEffect(() => {
-    poll();
-    const id = setInterval(() => { if (document.visibilityState === "visible") poll(); }, 2000);
-    const vis = () => { if (document.visibilityState === "visible") poll(); };
+    let timer: ReturnType<typeof setTimeout>;
+    let alive = true;
+    const loop = async () => {
+      if (document.visibilityState === "visible") await poll();
+      if (!alive) return;
+      timer = setTimeout(loop, Date.now() - lastActive.current > IDLE_AFTER ? POLL_IDLE : POLL_ACTIVE);
+    };
+    loop();
+    const wake = () => { lastActive.current = Date.now(); };
+    const vis = () => { if (document.visibilityState === "visible") { wake(); poll(); } };
     document.addEventListener("visibilitychange", vis);
-    return () => { clearInterval(id); document.removeEventListener("visibilitychange", vis); };
+    addEventListener("pointerdown", wake); addEventListener("keydown", wake);
+    return () => {
+      alive = false; clearTimeout(timer);
+      document.removeEventListener("visibilitychange", vis);
+      removeEventListener("pointerdown", wake); removeEventListener("keydown", wake);
+    };
   }, [poll]);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 2600); return () => clearTimeout(t); }, [toast]);
@@ -324,6 +424,7 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
   pinned.current = queue[0]?.key ?? null;
 
   const vote = useCallback((t: Title, like: boolean) => {
+    lastActive.current = Date.now();
     setVoted((v) => new Set(v).add(t.key));
     setHistory((h) => [...h, t.key]);
     api<{ match: boolean }>(`/api/rooms/${code}/vote`, { method: "POST", body: { member, key: t.key, like } })
@@ -350,6 +451,14 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
     api(`/api/rooms/${code}/unvote`, { method: "POST", body: { member, key: last } }).then(poll).catch((e) => setToast((e as Error).message));
   }, [history_, code, member, poll]);
 
+  const isWatched = (key: string) => watchedLocal[key] ?? !!state?.watched?.[key];
+  function markWatched(t: Title, watched: boolean) {
+    setWatchedLocal((w) => ({ ...w, [t.key]: watched }));
+    api(`/api/rooms/${code}/watched`, { method: "POST", body: { member, key: t.key, watched } })
+      .then(() => { setToast(watched ? `“${t.title}” spostato tra i già visti` : `“${t.title}” di nuovo da vedere`); poll(); })
+      .catch((e) => { setWatchedLocal((w) => { const n = { ...w }; delete n[t.key]; return n; }); setToast((e as Error).message); });
+  }
+
   async function leaveRoom() {
     try { await api(`/api/rooms/${code}/leave`, { method: "POST", body: { member } }); } catch { /* esco comunque */ }
     forgetRoom(code); onExit();
@@ -357,9 +466,11 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
 
   const members = state?.members ?? [{ id: member, name: session.name, seen: voted.size }];
   const matches = [...(state?.matches ?? [])].sort((a, b) => b.at - a.at).map((m) => byKey.get(m.key)).filter((t): t is Title => !!t);
+  const toWatch = matches.filter((t) => !isWatched(t.key));
+  const watchedList = matches.filter((t) => isWatched(t.key));
   const alone = members.length < 2;
   const cur = queue[0];
-  const ambient = tab === "swipe" ? cur?.poster ?? matches[0]?.poster ?? null : matches[0]?.poster ?? null;
+  const ambient = tab === "swipe" ? cur?.poster ?? toWatch[0]?.poster ?? null : toWatch[0]?.poster ?? matches[0]?.poster ?? null;
   const popupTitle = popups[0] ? byKey.get(popups[0]) : undefined;
 
   if (gone) {
@@ -376,14 +487,14 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
       <Ambient src={ambient} />
       <main className="app room">
         <div className="top">
-          <button className="glass pill code-pill" onClick={() => setInvite(true)} aria-label={`Stanza ${code}: invita altre persone`}>
-            <span className="muted">Stanza</span> <b>{code}</b>
+          <button className="glass pill code-pill" onClick={() => setInvite(true)} aria-label={`${meta.name || "Stanza"} ${code}: invita altre persone`}>
+            <span className="muted room-title">{meta.name || "Stanza"}</span> <b>{code}</b>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
           <div className="segmented two mini" role="tablist" aria-label="Vista">
             <button role="tab" aria-selected={tab === "swipe"} aria-checked={tab === "swipe"} onClick={() => setTab("swipe")}>Swipe</button>
             <button role="tab" aria-selected={tab === "list"} aria-checked={tab === "list"} onClick={() => setTab("list")}>
-              Match{matches.length ? <span className="badge">{matches.length}</span> : null}
+              Match{toWatch.length ? <span className="badge">{toWatch.length}</span> : null}
             </button>
           </div>
         </div>
@@ -406,22 +517,35 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
 
         {tab === "swipe" ? (
           cur ? (
-            <Swipe key="swipe" queue={queue} paused={!!detail || invite || confirmLeave || popups.length > 0}
+            <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || confirmLeave || popups.length > 0}
               canUndo={history_.length > 0} onVote={vote} onUndo={undo}
-              onOpen={(t) => setDetail({ t, canVote: true })} onList={() => setTab("list")} matchCount={matches.length} />
+              onOpen={(t) => setDetail({ t, canVote: true })} onList={() => setTab("list")} matchCount={toWatch.length} />
           ) : (
             <section className="glass panel center">
               <h3>Hai votato tutto</h3>
-              <p className="muted">{alone ? "Quando entrerà qualcuno, i titoli che vi piacciono compariranno tra i match." : "I match possono ancora arrivare mentre gli altri votano: te li mostro appena succede."}</p>
-              <button className="btn primary" onClick={() => setTab("list")}>Vedi i match ({matches.length})</button>
+              <p className="muted">{alone
+                ? "Quando entrerà qualcuno, i titoli che vi piacciono compariranno tra i match."
+                : "I match possono ancora arrivare mentre gli altri votano. Se volete altre proposte, fate un nuovo giro: i titoli già votati non tornano."}</p>
+              <button className="btn primary" onClick={() => setRound(true)}>Nuovo giro: altri titoli</button>
+              <button className="btn" onClick={() => setTab("list")}>Vedi i match ({toWatch.length} da vedere)</button>
             </section>
           )
         ) : (
           <section className="stack-m">
-            <div className="headline"><span className="big">{matches.length}</span><span>{matches.length === 1 ? "titolo piace a tutti" : "titoli piacciono a tutti"}</span></div>
-            {matches.length ? <Grid items={matches} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
-              <p className="glass panel muted">Ancora nessun match. Appena un titolo piace a tutti i presenti comparirà qui, e ve lo segnalo subito.</p>
+            <div className="headline"><span className="big">{toWatch.length}</span><span>{toWatch.length === 1 ? "match da vedere" : "match da vedere"}</span></div>
+            {toWatch.length ? <Grid items={toWatch} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
+              <p className="glass panel muted">{matches.length
+                ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
+                : "Ancora nessun match. Appena un titolo piace a tutti i presenti comparirà qui, e ve lo segnalo subito."}</p>
             )}
+            {watchedList.length > 0 && (<>
+              <h3 className="section-title">Già visti <span className="muted">{watchedList.length}</span></h3>
+              <Grid items={watchedList} watched onOpen={(t) => setDetail({ t, canVote: false })} />
+            </>)}
+            <button className="glass panel round-cta" onClick={() => setRound(true)}>
+              <span><b>Nuovo giro</b><span className="muted small">Altri titoli da votare, anche con generi o piattaforme diversi.</span></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
           </section>
         )}
         <Footer />
@@ -429,11 +553,17 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
 
       {detail && (
         <Sheet t={detail.t} onClose={() => setDetail(null)}
-          onVote={detail.canVote ? (yes) => { const t = detail.t; setDetail(null); vote(t, yes); } : undefined} />
+          onVote={detail.canVote ? (yes) => { const t = detail.t; setDetail(null); vote(t, yes); } : undefined}
+          watched={detail.canVote ? undefined : isWatched(detail.t.key)}
+          onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }} />
       )}
-      {invite && <Invite code={code} onClose={() => setInvite(false)} onLeave={() => { setInvite(false); setConfirmLeave(true); }} />}
+      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)} onLeave={() => { setInvite(false); setConfirmLeave(true); }} />}
+      {round && (
+        <NewRound code={code} member={member} meta={meta} providers={providers} onClose={() => setRound(false)}
+          onDone={(r) => { setDeck(r.deck); setMeta(r.meta); setRound(false); setTab("swipe"); setToast(`Aggiunti ${r.added} titoli nuovi`); poll(); }} />
+      )}
       {confirmLeave && (
-        <Confirm title="Vuoi uscire dalla stanza?" text="I tuoi voti verranno cancellati e gli altri potranno fare match senza di te."
+        <Confirm title="Vuoi uscire dalla stanza?" text="I tuoi voti verranno cancellati e gli altri potranno fare match senza di te. La stanza sparirà anche da questo telefono."
           keep="Resta nella stanza" go="Esci" onCancel={() => setConfirmLeave(false)} onConfirm={leaveRoom} />
       )}
       {popupTitle && (
@@ -443,6 +573,37 @@ function Room({ session, onExit }: { session: Session; onExit: () => void }) {
       )}
       {toast && <div className="toast glass" role="status">{toast}</div>}
     </>
+  );
+}
+
+/* ================= Nuovo giro ================= */
+function NewRound({ code, member, meta, providers, onClose, onDone }: {
+  code: string; member: string; meta: RoomMeta; providers: Provider[];
+  onClose: () => void; onDone: (r: { added: number; meta: RoomMeta; deck: Title[] }) => void;
+}) {
+  const [sel, setSel] = useState<number[]>(meta.providers);
+  const [filter, setFilter] = useState<TypeFilter>(meta.filter);
+  const [genres, setGenres] = useState<string[]>(meta.genres ?? []);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function go() {
+    setBusy(true); setError("");
+    try {
+      onDone(await api(`/api/rooms/${code}/round`, { method: "POST", body: { member, providers: sel, filter, genres: activeGenresFor(genres, filter) } }));
+    } catch (e) { setError((e as Error).message); setBusy(false); }
+  }
+  return (
+    <SheetFrame label="Nuovo giro" onClose={onClose}>
+      <div className="stack-m">
+        <div className="stack-s" style={{ paddingRight: 40 }}>
+          <h2>Nuovo giro</h2>
+          <p className="muted">Aggiungo titoli che in questa stanza non avete mai visto. Potete cambiare piattaforme e generi per stasera: vale per tutti.</p>
+        </div>
+        <Filters {...{ providers, sel, setSel, filter, setFilter, genres, setGenres }} />
+        {error && <p className="err">{error}</p>}
+        <button className="btn primary" onClick={go} disabled={busy || !sel.length}>{busy ? "Cerco titoli nuovi…" : "Aggiungi titoli nuovi"}</button>
+      </div>
+    </SheetFrame>
   );
 }
 
@@ -580,10 +741,10 @@ function MatchPopup({ t, names, onClose, onList }: { t: Title; names: string[]; 
 }
 
 /* ================= Invito ================= */
-function Invite({ code, onClose, onLeave }: { code: string; onClose: () => void; onLeave: () => void }) {
+function Invite({ code, roomName, onClose, onLeave }: { code: string; roomName?: string; onClose: () => void; onLeave: () => void }) {
   const [msg, setMsg] = useState("");
   const link = typeof location !== "undefined" ? `${location.origin}/r/${code}` : "";
-  const text = `Scegliamo cosa guardare su Filmetto! Entra nella stanza ${code}: ${link}`;
+  const text = `Scegliamo cosa guardare su Filmetto! Entra nella stanza ${roomName ? `“${roomName}” (${code})` : code}: ${link}`;
   async function share() {
     try { if (navigator.share) { await navigator.share({ title: "Filmetto", text }); return; } } catch { return; }
     try { await navigator.clipboard.writeText(text); setMsg("Invito copiato"); } catch { setMsg("Copia il link qui sotto"); }
@@ -593,7 +754,7 @@ function Invite({ code, onClose, onLeave }: { code: string; onClose: () => void;
       <div className="invite">
         <span className="lbl">Codice della stanza</span>
         <div className="code-big" aria-label={code.split("").join(" ")}>{code.split("").map((c, i) => <span key={i}>{c}</span>)}</div>
-        <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata.</p>
+        <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata. La stanza resta attiva finché la usate (scade dopo 30 giorni senza nessun accesso).</p>
         <button className="btn primary" onClick={share}>Condividi l&apos;invito</button>
         {msg && <p className="small center">{msg}</p>}
         <input type="text" readOnly value={link} aria-label="Link della stanza" onFocus={(e) => e.currentTarget.select()} className="link-field" />
@@ -652,7 +813,9 @@ function SheetFrame({ label, bg, onClose, children }: { label: string; bg?: stri
   );
 }
 
-function Sheet({ t, onClose, onVote }: { t: Title; onClose: () => void; onVote?: (yes: boolean) => void }) {
+function Sheet({ t, onClose, onVote, watched, onWatched }: {
+  t: Title; onClose: () => void; onVote?: (yes: boolean) => void; watched?: boolean; onWatched?: (w: boolean) => void;
+}) {
   return (
     <SheetFrame label={t.title} bg={small(t.poster, "w342")} onClose={onClose}>
       <div className="sheet-head">
@@ -675,20 +838,24 @@ function Sheet({ t, onClose, onVote }: { t: Title; onClose: () => void; onVote?:
           <button className="btn no" onClick={() => onVote(false)}>No</button>
           <button className="btn yes" onClick={() => onVote(true)}>Mi piace</button>
         </div>
-      ) : (
+      ) : (<>
+        {onWatched && (watched
+          ? <button className="btn" onClick={() => onWatched(false)}>Rimetti tra quelli da vedere</button>
+          : <button className="btn yes" onClick={() => onWatched(true)}>L&apos;abbiamo visto ✓</button>)}
         <a className="btn primary" href={`https://www.justwatch.com/it/cerca?q=${encodeURIComponent(t.title)}`} target="_blank" rel="noopener">Dove guardarlo</a>
-      )}
+      </>)}
     </SheetFrame>
   );
 }
 
-function Grid({ items, onOpen }: { items: Title[]; onOpen: (t: Title) => void }) {
+function Grid({ items, onOpen, watched }: { items: Title[]; onOpen: (t: Title) => void; watched?: boolean }) {
   return (
-    <ul className="grid">
+    <ul className={"grid" + (watched ? " watched" : "")}>
       {items.map((t) => (
         <li key={t.key}>
           <button className="tile" onClick={() => onOpen(t)} aria-label={`${t.title}: apri la scheda`}>
             {t.poster ? <img src={small(t.poster, "w342")!} alt="" /> : <span className="noposter" />}
+            {watched && <span className="seen-tag">Visto ✓</span>}
             <span className="tile-cap glass"><b>{t.title}</b><span>{t.providers[0] ?? metaLine(t)}</span></span>
           </button>
         </li>

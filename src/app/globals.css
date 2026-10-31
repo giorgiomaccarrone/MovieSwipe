@@ -224,3 +224,24 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .hint-inline { font-size: 12px; color: var(--faint); }
 .mini-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .chip.small-chip { font-size: 14px; padding: 6px 12px; }
+
+/* ---------- Le tue stanze ---------- */
+.rooms { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.room-row { display: flex; align-items: center; border-radius: 20px; overflow: hidden; }
+.room-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 8px 12px 12px; background: none; border: 0; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.room-open > svg { width: 20px; height: 20px; color: var(--muted); flex: none; }
+.room-badge { flex: none; width: 54px; height: 44px; display: grid; place-items: center; border-radius: 12px; background: var(--glass-strong); font-weight: 800; font-size: 14px; letter-spacing: .08em; }
+.room-text { flex: 1; min-width: 0; display: grid; }
+.room-text b, .room-text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.room-forget { flex: none; width: 44px; align-self: stretch; display: grid; place-items: center; background: none; border: 0; border-left: 1px solid var(--stroke); color: var(--faint); cursor: pointer; }
+.room-forget svg { width: 16px; height: 16px; }
+.claim { padding: 12px; border-radius: 16px; background: rgba(255, 214, 10, .08); border: 1px solid rgba(255, 214, 10, .25); }
+.room-title { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Visti e nuovo giro ---------- */
+.section-title { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; }
+.grid.watched .tile img { filter: grayscale(.7) brightness(.7); }
+.seen-tag { position: absolute; top: 8px; right: 8px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--yes); color: #002910; }
+.round-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink); font: inherit; text-align: left; cursor: pointer; padding: 14px 16px; }
+.round-cta > span { display: grid; gap: 2px; }
+.round-cta svg { width: 20px; height: 20px; color: var(--muted); flex: none; }

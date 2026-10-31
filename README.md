@@ -6,7 +6,9 @@ Tinder per film e serie, senza login. Si crea una stanza, si condivide il codice
 1. Chi crea la stanza sceglie le piattaforme (Netflix, Prime Video, RaiPlay…) e film/serie/tutto. Il mazzo è uguale per tutti.
 2. Gli altri entrano dal link `/r/CODICE` o scrivendo il codice. Si può entrare anche a partita iniziata.
 3. I titoli che piacciono già a qualcuno vengono anticipati nel mazzo degli altri, così i match arrivano prima.
-4. L'app controlla la stanza ogni 2 secondi (una sola lettura se non è cambiato niente). Le stanze durano 24 ore.
+4. L'app controlla la stanza ogni 3 secondi mentre si vota e ogni 12 quando nessuno tocca il telefono (una sola lettura se non è cambiato niente).
+6. Le stanze restano attive 30 giorni dall'ultimo accesso: i match si segnano come "visti", e con "Nuovo giro" si aggiungono titoli mai proposti (anche con filtri diversi).
+7. In home "Le tue stanze" elenca le stanze del telefono; da un telefono nuovo si rientra con "Eri già dentro? Tocca il tuo nome".
 5. Ogni telefono riceve un ID anonimo salvato nel browser: ricaricando la pagina si rientra con i propri voti.
 
 ## Sviluppo
