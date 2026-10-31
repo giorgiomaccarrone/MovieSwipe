@@ -30,7 +30,7 @@ export const isMember = (s: string) => /^[a-f0-9-]{36}$/.test(s);
 export const isTitleKey = (s: string) => /^[mt][0-9a-z]{1,10}$/.test(s);
 export const cleanName = (s: string) =>
   (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, " ").slice(0, 16);
-const cleanRoomName = (s: string) => (s || "").replace(/[<>]/g, "").trim().replace(/\s+/g, " ").slice(0, 32);
+const cleanRoomName = (s: string) => (s || "").replace(/[<>]/g, "").trim().replace(/\s+/g, " ").slice(0, 40);
 
 export interface RoomMeta {
   name?: string; providers: number[]; filter: TypeFilter; genres?: string[];
@@ -44,6 +44,7 @@ export interface RoomState {
   matches: { key: string; at: number }[];
   watched: Record<string, number>;
   deckSize: number;
+  name: string | null;
 }
 export class RoomError extends Error { constructor(msg: string, public status = 400) { super(msg); } }
 
@@ -177,6 +178,7 @@ export async function roomState(code: string, since?: number): Promise<RoomState
     matches: matches.filter((m) => m.member !== "_").map((m) => ({ key: m.member, at: m.score })),
     watched: Object.fromEntries(Object.entries(watched).filter(([key]) => key !== "_").map(([key, t]) => [key, Number(t)])),
     deckSize: meta?.deckSize ?? 0,
+    name: meta?.name ?? null,
   };
 }
 
@@ -290,4 +292,15 @@ export async function deleteRoom(code: string, member: string) {
   if (!name) throw new RoomError("Non sei in questa stanza.", 403);
   await kv.del(...PARTS.map((p) => k(code, p)));
   await kv.set(k(code, "deleted"), name, TTL);
+}
+
+/** Cambia (o toglie, se vuoto) il nome della stanza: lo vedono subito tutti */
+export async function renameRoom(code: string, member: string, name: string) {
+  await requireMember(code, member);
+  const { meta } = await loadRoom(code);
+  const next = { ...meta, name: cleanRoomName(name) || undefined };
+  await kv.set(k(code, "meta"), JSON.stringify(next), TTL);
+  await kv.incr(k(code, "v"));
+  await touch(code); // set() rimette la scadenza: se la stanza ha match torna permanente
+  return { name: next.name ?? null };
 }

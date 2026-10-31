@@ -13,7 +13,7 @@ interface Session {
 interface Member { id: string; name: string; seen: number }
 interface RoomState {
   v: number; members: Member[]; counts: Record<string, number>; matches: { key: string; at: number }[];
-  watched: Record<string, number>; deckSize: number;
+  watched: Record<string, number>; deckSize: number; name: string | null;
 }
 
 /* ---------- Memoria locale (solo comodità: nome, filtri, stanze in cui sono entrato) ---------- */
@@ -348,7 +348,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
               <label className="lbl" htmlFor="roomname">Nome della stanza</label>
               <span className="hint-inline">Facoltativo</span>
             </div>
-            <input id="roomname" type="text" maxLength={32} autoComplete="off" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
+            <input id="roomname" type="text" maxLength={40} autoComplete="off" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
           </div>
           <Filters {...{ providers, sel, setSel, filter, setFilter, genres, setGenres }} emptyText={bootError} />
         </>)}
@@ -401,6 +401,7 @@ function Room({ session, providers, onExit, onSwitch }: {
       vRef.current = d.v;
       setState(d);
       setWatchedLocal({});
+      setMeta((m) => ((m.name ?? null) === d.name ? m : { ...m, name: d.name ?? undefined })); // rinominata da qualcuno
       // Qualcuno ha avviato un nuovo giro: scarico il mazzo aggiornato
       if (d.deckSize && d.deckSize !== deckLen.current) {
         api<{ meta: RoomMeta; deck: Title[] }>(`/api/rooms/${code}/deck`).then((r) => { setDeck(r.deck); setMeta(r.meta); }).catch(() => {});
@@ -611,7 +612,8 @@ function Room({ session, providers, onExit, onSwitch }: {
           watched={detail.canVote ? undefined : isWatched(detail.t.key)}
           onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }} />
       )}
-      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)} onSwitch={onSwitch}
+      {invite && <Invite code={code} member={member} roomName={meta.name} onClose={() => setInvite(false)} onSwitch={onSwitch}
+        onRenamed={(n) => { setMeta((m) => ({ ...m, name: n ?? undefined })); setToast(n ? `Stanza rinominata in “${n}”` : "Nome della stanza tolto"); poll(); }}
         onLeave={() => { setInvite(false); setConfirmLeave(true); }}
         onDelete={() => { setInvite(false); setConfirmDelete(true); }} />}
       {confirmDelete && (
@@ -799,10 +801,22 @@ function MatchPopup({ t, names, onClose, onList }: { t: Title; names: string[]; 
 }
 
 /* ================= Invito ================= */
-function Invite({ code, roomName, onClose, onLeave, onDelete, onSwitch }: {
-  code: string; roomName?: string; onClose: () => void; onLeave: () => void; onDelete: () => void;
-  onSwitch: (code: string) => Promise<void>;
+function Invite({ code, member, roomName, onClose, onLeave, onDelete, onSwitch, onRenamed }: {
+  code: string; member: string; roomName?: string; onClose: () => void; onLeave: () => void; onDelete: () => void;
+  onSwitch: (code: string) => Promise<void>; onRenamed: (name: string | null) => void;
 }) {
+  const [newName, setNewName] = useState(roomName ?? "");
+  const [saving, setSaving] = useState(false);
+  const [renameErr, setRenameErr] = useState("");
+  const changed = newName.trim() !== (roomName ?? "");
+  async function rename() {
+    setSaving(true); setRenameErr("");
+    try {
+      const r = await api<{ name: string | null }>(`/api/rooms/${code}/rename`, { method: "POST", body: { member, name: newName } });
+      setNewName(r.name ?? ""); onRenamed(r.name);
+    } catch (e) { setRenameErr((e as Error).message); }
+    setSaving(false);
+  }
   const [msg, setMsg] = useState("");
   const [others] = useRoomSummaries(code);
   const [switching, setSwitching] = useState(false);
@@ -828,7 +842,15 @@ function Invite({ code, roomName, onClose, onLeave, onDelete, onSwitch }: {
             <span className="hint-inline">In questa stanza resti dentro con tutti i tuoi voti.</span>
           </section>
         )}
-        <span className="lbl">Invita in {roomName ? `“${roomName}”` : "questa stanza"}</span>
+        <form className="rename" onSubmit={(e) => { e.preventDefault(); if (changed) rename(); }}>
+          <label className="lbl" htmlFor="rename">Nome della stanza</label>
+          <div className="rename-row">
+            <input id="rename" type="text" maxLength={40} autoComplete="off" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button className="btn primary" disabled={!changed || saving}>{saving ? "…" : "Salva"}</button>
+          </div>
+          {renameErr ? <p className="err">{renameErr}</p> : <span className="hint-inline">Lo vedono subito tutti. Lascialo vuoto per togliere il nome.</span>}
+        </form>
+        <span className="lbl">Invita altre persone</span>
         <div className="code-big" aria-label={code.split("").join(" ")}>{code.split("").map((c, i) => <span key={i}>{c}</span>)}</div>
         <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata. Dal primo match la stanza resta salvata per sempre: segnatevi il codice per rientrare da qualsiasi telefono.</p>
         <button className="btn primary" onClick={share}>Condividi l&apos;invito</button>

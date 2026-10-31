@@ -260,3 +260,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .round.back svg { width: 18px; height: 18px; }
 .top .code-pill { margin-right: auto; }
 .switcher { display: grid; gap: 8px; text-align: left; padding-bottom: 14px; border-bottom: 1px solid var(--stroke); }
+
+/* ---------- Rinomina stanza ---------- */
+.rename { display: grid; gap: 8px; text-align: left; padding-bottom: 14px; border-bottom: 1px solid var(--stroke); }
+.rename-row { display: flex; gap: 8px; }
+.rename-row input { flex: 1; min-width: 0; }
+.rename-row .btn { width: auto; flex: none; padding: 0 18px; }
