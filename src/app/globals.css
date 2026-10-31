@@ -306,3 +306,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .seen-inline { display: grid; gap: 12px; text-align: center; padding: 14px; border-radius: var(--r-md); background: rgba(100, 210, 255, .08); border: 1px solid rgba(100, 210, 255, .25); }
 .seen-inline p { font-size: 17px; }
 .seen-inline .btn { font-size: 15px; white-space: nowrap; }
+
+/* Safari su iPhone (soprattutto nell'app aggiunta alla Home) sfoca anche il CONTENUTO degli elementi
+   in vetro che stanno dentro un altro elemento in vetro. Quando la barra diventa di vetro,
+   tolgo la sfocatura ai pulsanti al suo interno e uso uno sfondo semitrasparente pieno. */
+.sticky-bar.scrolled .glass {
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  background: rgba(255, 255, 255, .1);
+}
+.sticky-bar { transform: translateZ(0); } /* livello proprio: evita sfarfallii della sfocatura durante lo scorrimento */
