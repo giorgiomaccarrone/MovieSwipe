@@ -275,12 +275,17 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   border-bottom: 1px solid transparent;
   transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
 }
-.sticky-bar.scrolled {
+.sticky-bar { isolation: isolate; }
+/* Il vetro sta su uno strato a parte DIETRO i pulsanti: così Safari non sfoca anche il loro contenuto */
+.sticky-bar::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0;
   background: rgba(18, 18, 24, .55);
   -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
-  border-bottom-color: rgba(255, 255, 255, .08);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
   box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .7);
 }
+.sticky-bar.scrolled::before { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .sticky-bar { transition: none; } }
 
 /* ---------- Filtro Tutti / Film / Serie nei match ---------- */
@@ -307,11 +312,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .seen-inline p { font-size: 17px; }
 .seen-inline .btn { font-size: 15px; white-space: nowrap; }
 
-/* Safari su iPhone (soprattutto nell'app aggiunta alla Home) sfoca anche il CONTENUTO degli elementi
-   in vetro che stanno dentro un altro elemento in vetro. Quando la barra diventa di vetro,
-   tolgo la sfocatura ai pulsanti al suo interno e uso uno sfondo semitrasparente pieno. */
-.sticky-bar.scrolled .glass {
+/* Nell'app aggiunta alla Home di iPhone, Safari disegna sfocato TUTTO il contenuto della barra fissa
+   se al suo interno ci sono elementi con effetto vetro (backdrop-filter). Quindi:
+   - i pulsanti dentro la barra non usano mai la sfocatura, ma uno sfondo semitrasparente;
+   - la barra non ha transizioni né trasformazioni, che su iPhone la fanno ridisegnare a bassa risoluzione. */
+.sticky-bar { transition: none; }
+.sticky-bar .glass {
   -webkit-backdrop-filter: none; backdrop-filter: none;
-  background: rgba(255, 255, 255, .1);
+  background: rgba(255, 255, 255, .12);
 }
-.sticky-bar { transform: translateZ(0); } /* livello proprio: evita sfarfallii della sfocatura durante lo scorrimento */
