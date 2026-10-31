@@ -125,7 +125,8 @@ function useStatusBarColor(src: string | null) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return;
-    const setColor = (c: string) => { meta.setAttribute("content", c); document.documentElement.style.backgroundColor = c; };
+    // Solo il meta theme-color: NON cambiare lo sfondo della pagina, altrimenti copre le sfocature colorate
+    const setColor = (c: string) => { meta.setAttribute("content", c); };
     const file = src?.match(/\/w\d+(\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))$/)?.[1];
     if (!file) { setColor(BASE_THEME); return; }
     let alive = true;
