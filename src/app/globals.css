@@ -321,3 +321,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   -webkit-backdrop-filter: none; backdrop-filter: none;
   background: rgba(255, 255, 255, .12);
 }
+
+/* ---------- App aggiunta alla Home di iPhone ----------
+   Con la barra di stato trasparente iOS 26 sfoca da solo la fascia in cima allo schermo
+   (circa fino a 110–120 punti dall'alto). Lì lasciamo solo lo sfondo colorato e
+   spostiamo più in basso i controlli, così restano nitidi. In Safari e Chrome non cambia nulla. */
+@media (display-mode: standalone) {
+  .app { padding-top: calc(env(safe-area-inset-top) + 64px); }
+  .app.room { padding-top: 0; }
+  .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 64px); }
+}
