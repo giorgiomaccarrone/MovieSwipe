@@ -240,7 +240,9 @@ function Swipe({ name, deck, pos, paused, onVote, onUndo, onStop, onOpen }: {
 }) {
   const card = useRef<HTMLElement>(null);
   const busy = useRef(false);
+  const [confirm, setConfirm] = useState(false);
   const cur = deck[pos], next = deck[pos + 1];
+  paused = paused || confirm;
 
   // Precarico le prossime locandine
   useEffect(() => {
@@ -313,11 +315,12 @@ function Swipe({ name, deck, pos, paused, onVote, onUndo, onStop, onOpen }: {
         <button className="glass round y" onClick={() => fly(true)} aria-label="Mi piace">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5h2c.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z" /></svg>
         </button>
-        <button className="glass round sm" onClick={onStop} aria-label="Ho finito, vedi il risultato">
+        <button className="glass round sm" onClick={() => setConfirm(true)} aria-label="Ho finito, vedi il risultato">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
         </button>
       </div>
       <p className="hint">Scorri a destra se ti piace, a sinistra se no. Tocca la carta per leggere la trama.</p>
+      {confirm && <ConfirmStop seen={pos} total={deck.length} onCancel={() => setConfirm(false)} onConfirm={onStop} />}
     </>
   );
 }
@@ -339,6 +342,28 @@ function Card({ t, under, ref }: { t: Title; under?: boolean; ref?: React.Ref<HT
       </div>
       <span className="stamp y">MI PIACE</span><span className="stamp n">NO</span>
     </article>
+  );
+}
+
+/* ================= Conferma "Ho finito" ================= */
+function ConfirmStop({ seen, total, onCancel, onConfirm }: { seen: number; total: number; onCancel: () => void; onConfirm: () => void }) {
+  const keep = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    keep.current?.focus();
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    addEventListener("keydown", k); return () => removeEventListener("keydown", k);
+  }, [onCancel]);
+  return (
+    <div className="dialog-wrap" onClick={onCancel}>
+      <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="stop-t" aria-describedby="stop-d" onClick={(e) => e.stopPropagation()}>
+        <h3 id="stop-t">Hai finito di votare?</h3>
+        <p id="stop-d" className="muted">Hai visto {seen} {seen === 1 ? "titolo" : "titoli"} su {total}. Quelli che non hai visto conteranno come “No” e non potrai più votarli.</p>
+        <div className="dialog-actions">
+          <button ref={keep} className="btn primary" onClick={onCancel}>Continua a votare</button>
+          <button className="btn danger" onClick={onConfirm}>Sì, ho finito</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
