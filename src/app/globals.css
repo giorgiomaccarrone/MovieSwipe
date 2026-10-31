@@ -327,9 +327,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
    (circa fino a 110–120 punti dall'alto). Lì lasciamo solo lo sfondo colorato e
    spostiamo più in basso i controlli, così restano nitidi. In Safari e Chrome non cambia nulla. */
 @media (display-mode: standalone) {
-  .app { padding-top: calc(env(safe-area-inset-top) + 20px); }
+  .app { padding-top: calc(env(safe-area-inset-top) + 24px); }
   .app.room { padding-top: 0; }
-  .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 20px); }
-  /* il vetro scuro della barra parte sotto l'ora: lassù lasciamo il colore dello sfondo (lo sfoca già iOS) */
-  .sticky-bar::before { top: env(safe-area-inset-top); }
+  .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 24px); }
+  /* Il vetro della barra parte sotto l'ora (lassù sfoca già iOS); quando si scorre,
+     la zona dell'ora si scurisce con la stessa tinta, senza aggiungere altra sfocatura */
+  .sticky-bar::before { top: env(safe-area-inset-top); border-top: 0; }
+  .sticky-bar::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: env(safe-area-inset-top);
+    z-index: -1; pointer-events: none; opacity: 0;
+    background: rgba(18, 18, 24, .55);
+  }
+  .sticky-bar.scrolled::after { opacity: 1; }
 }
