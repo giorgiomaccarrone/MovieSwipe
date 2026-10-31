@@ -183,7 +183,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 
 /* ---------- Stanza ---------- */
 .room { gap: 14px; }
-.code-pill { color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; padding: 7px 12px; gap: 6px; }
+.code-pill { color: var(--ink); font: inherit; font-size: 15px; cursor: pointer; padding: 7px 12px; gap: 6px; min-width: 0; flex: 0 1 auto; }
+.code-pill b, .code-pill svg { flex: none; }
 .code-pill b { letter-spacing: .12em; }
 .code-pill svg { width: 16px; height: 16px; color: var(--muted); }
 .segmented.mini { width: auto; min-width: 170px; }
@@ -236,7 +237,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .room-forget { flex: none; width: 44px; align-self: stretch; display: grid; place-items: center; background: none; border: 0; border-left: 1px solid var(--stroke); color: var(--faint); cursor: pointer; }
 .room-forget svg { width: 16px; height: 16px; }
 .claim { padding: 12px; border-radius: 16px; background: rgba(255, 214, 10, .08); border: 1px solid rgba(255, 214, 10, .25); }
-.room-title { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- Visti e nuovo giro ---------- */
 .section-title { display: flex; gap: 8px; align-items: baseline; margin-top: 6px; }
@@ -245,3 +246,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .round-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--ink); font: inherit; text-align: left; cursor: pointer; padding: 14px 16px; }
 .round-cta > span { display: grid; gap: 2px; }
 .round-cta svg { width: 20px; height: 20px; color: var(--muted); flex: none; }
+
+/* Interruttore Swipe / Match con icone: largo fisso, non esce mai dallo schermo */
+.segmented.mini.icons { flex: none; min-width: 0; width: 112px; }
+.segmented.mini.icons button { position: relative; padding: 7px 0; }
+.segmented.mini.icons svg { width: 20px; height: 20px; }
+.segmented.mini.icons .badge { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; font-size: 11px; padding: 0 5px; }

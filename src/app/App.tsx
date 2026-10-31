@@ -490,10 +490,18 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
             <span className="muted room-title">{meta.name || "Stanza"}</span> <b>{code}</b>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
-          <div className="segmented two mini" role="tablist" aria-label="Vista">
-            <button role="tab" aria-selected={tab === "swipe"} aria-checked={tab === "swipe"} onClick={() => setTab("swipe")}>Swipe</button>
-            <button role="tab" aria-selected={tab === "list"} aria-checked={tab === "list"} onClick={() => setTab("list")}>
-              Match{toWatch.length ? <span className="badge">{toWatch.length}</span> : null}
+          <div className="segmented two mini icons" role="tablist" aria-label="Vista">
+            <button role="tab" aria-selected={tab === "swipe"} aria-checked={tab === "swipe"} onClick={() => setTab("swipe")} aria-label="Swipe" title="Swipe">
+              {/* due carte sovrapposte */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden>
+                <rect x="3.5" y="5" width="11" height="15" rx="2.5" transform="rotate(-10 9 12.5)" />
+                <rect x="9" y="3.5" width="11" height="15" rx="2.5" fill="currentColor" fillOpacity=".18" transform="rotate(8 14.5 11)" />
+              </svg>
+            </button>
+            <button role="tab" aria-selected={tab === "list"} aria-checked={tab === "list"} onClick={() => setTab("list")}
+              aria-label={toWatch.length ? `Match, ${toWatch.length} da vedere` : "Match"} title="Match">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d={HEART} /></svg>
+              {toWatch.length ? <span className="badge">{toWatch.length}</span> : null}
             </button>
           </div>
         </div>
