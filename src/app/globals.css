@@ -330,13 +330,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   .app { padding-top: calc(env(safe-area-inset-top) + 24px); }
   .app.room { padding-top: 0; }
   .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 24px); }
-  /* Il vetro della barra parte sotto l'ora (lassù sfoca già iOS); quando si scorre,
-     la zona dell'ora si scurisce con la stessa tinta, senza aggiungere altra sfocatura */
+  /* Il vetro della barra è diviso in due strati (sotto l'ora e sotto i pulsanti):
+     quando si scorre tutti e due si scuriscono e sfocano allo stesso modo */
   .sticky-bar::before { top: env(safe-area-inset-top); border-top: 0; }
   .sticky-bar::after {
     content: ""; position: absolute; left: 0; right: 0; top: 0; height: env(safe-area-inset-top);
     z-index: -1; pointer-events: none; opacity: 0;
     background: rgba(18, 18, 24, .55);
+    /* stessa sfocatura della barra sotto: quella automatica di iOS da sola è più leggera */
+    -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
   }
   .sticky-bar.scrolled::after { opacity: 1; }
 }
