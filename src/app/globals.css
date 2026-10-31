@@ -282,3 +282,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .7);
 }
 @media (prefers-reduced-motion: reduce) { .sticky-bar { transition: none; } }
+
+/* ---------- Filtro Tutti / Film / Serie nei match ---------- */
+.kind-filter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.kind-filter .count { font-size: 12px; font-weight: 600; opacity: .55; font-variant-numeric: tabular-nums; }

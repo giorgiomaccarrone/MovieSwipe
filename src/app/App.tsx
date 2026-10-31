@@ -513,7 +513,14 @@ function Room({ session, providers, onExit, onSwitch }: {
   const members = state?.members ?? [{ id: member, name: session.name, seen: voted.size }];
   const matches = [...(state?.matches ?? [])].sort((a, b) => b.at - a.at).map((m) => byKey.get(m.key)).filter((t): t is Title => !!t);
   const toWatch = matches.filter((t) => !isWatched(t.key));
-  const watchedList = matches.filter((t) => isWatched(t.key));
+  // Filtro Tutti / Film / Serie nella lista match: compare solo se la stanza ha film e serie
+  const [kind, setKind] = useState<TypeFilter>("all");
+  const mixed = meta.filter === "all" || (matches.some((t) => t.type === "movie") && matches.some((t) => t.type === "tv"));
+  const shownKind: TypeFilter = mixed ? kind : "all";
+  const ofKind = (t: Title) => shownKind === "all" || t.type === shownKind;
+  const toWatchShown = toWatch.filter(ofKind);
+  const watchedList = matches.filter((t) => isWatched(t.key)).filter(ofKind);
+  const kindLabel = shownKind === "movie" ? "film" : shownKind === "tv" ? "serie" : "match";
   const alone = members.length < 2;
   const cur = queue[0];
   const ambient = tab === "swipe" ? cur?.poster ?? toWatch[0]?.poster ?? null : toWatch[0]?.poster ?? matches[0]?.poster ?? null;
@@ -594,10 +601,21 @@ function Room({ session, providers, onExit, onSwitch }: {
           )
         ) : (
           <section className="stack-m">
-            <div className="headline"><span className="big">{toWatch.length}</span><span>{toWatch.length === 1 ? "match da vedere" : "match da vedere"}</span></div>
-            {toWatch.length ? <Grid items={toWatch} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
-              <p className="glass panel muted">{matches.length
-                ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
+            <div className="headline"><span className="big">{toWatchShown.length}</span><span>{kindLabel} da vedere</span></div>
+            {mixed && (
+              <div className="segmented kind-filter" role="radiogroup" aria-label="Mostra">
+                {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
+                  <button key={f} type="button" role="radio" aria-checked={shownKind === f} onClick={() => setKind(f)}>
+                    {f === "all" ? "Tutti" : TYPE_LABEL[f]}
+                    <span className="count">{(f === "all" ? toWatch : toWatch.filter((t) => t.type === f)).length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {toWatchShown.length ? <Grid items={toWatchShown} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
+              <p className="glass panel muted">{
+                toWatch.length ? `Nessun${shownKind === "tv" ? "a serie" : " film"} da vedere tra i match: prova “Tutti” o fate un nuovo giro.`
+                : matches.length ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
                 : "Ancora nessun match. Appena un titolo piace a tutti i presenti comparirà qui, e ve lo segnalo subito."}</p>
             )}
             {watchedList.length > 0 && (<>
