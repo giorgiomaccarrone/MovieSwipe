@@ -330,4 +330,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
   .app { padding-top: calc(env(safe-area-inset-top) + 20px); }
   .app.room { padding-top: 0; }
   .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 20px); }
+  /* il vetro scuro della barra parte sotto l'ora: lassù lasciamo il colore dello sfondo (lo sfoca già iOS) */
+  .sticky-bar::before { top: env(safe-area-inset-top); }
 }
