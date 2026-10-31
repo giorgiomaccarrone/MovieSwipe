@@ -392,6 +392,13 @@ function Room({ session, providers, onExit, onSwitch }: {
   const deckLen = useRef(deck.length);
   deckLen.current = deck.length;
   const lastActive = useRef(Date.now());
+  // Barra in alto: diventa di vetro appena si scorre la pagina
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll(); addEventListener("scroll", onScroll, { passive: true });
+    return () => removeEventListener("scroll", onScroll);
+  }, []);
 
   /* --- aggiornamenti: una lettura leggera che dice solo "è cambiato qualcosa?" --- */
   const poll = useCallback(async () => {
@@ -525,7 +532,7 @@ function Room({ session, providers, onExit, onSwitch }: {
     <>
       <Ambient src={ambient} />
       <main className="app room">
-        <div className="top">
+        <div className={"top sticky-bar" + (scrolled ? " scrolled" : "")}>
           <button className="glass round back" onClick={onExit} aria-label="Torna alle tue stanze (resti nella stanza)" title="Le tue stanze">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
           </button>

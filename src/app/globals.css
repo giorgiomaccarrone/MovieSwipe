@@ -266,3 +266,19 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .rename-row { display: flex; gap: 8px; }
 .rename-row input { flex: 1; min-width: 0; }
 .rename-row .btn { width: auto; flex: none; padding: 0 18px; }
+
+/* ---------- Barra fissa in alto (stanza) ---------- */
+.app.room { padding-top: 0; }
+.sticky-bar {
+  position: sticky; top: 0; z-index: 8;
+  margin: 0 -16px; padding: max(14px, env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid transparent;
+  transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.sticky-bar.scrolled {
+  background: rgba(18, 18, 24, .55);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  border-bottom-color: rgba(255, 255, 255, .08);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .7);
+}
+@media (prefers-reduced-motion: reduce) { .sticky-bar { transition: none; } }
