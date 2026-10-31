@@ -118,39 +118,7 @@ function Footer() {
 }
 
 /* ================= Sfondo ================= */
-const BASE_THEME = "#15132a"; // colore in alto dello sfondo quando non c'è una locandina
-
-/** Colora la barra di stato di iPhone (app aggiunta alla Home) con i colori in cima allo sfondo */
-function useStatusBarColor(src: string | null) {
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    const setColor = (c: string) => { meta.setAttribute("content", c); document.documentElement.style.backgroundColor = c; };
-    const file = src?.match(/\/w\d+(\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))$/)?.[1];
-    if (!file) { setColor(BASE_THEME); return; }
-    let alive = true;
-    const img = new Image();
-    img.onload = () => {
-      if (!alive) return;
-      try {
-        const c = document.createElement("canvas"); c.width = 8; c.height = 12;
-        const ctx = c.getContext("2d")!; ctx.drawImage(img, 0, 0, 8, 12);
-        const d = ctx.getImageData(0, 0, 8, 4).data; // fascia alta della locandina
-        let r = 0, g = 0, b = 0; const n = d.length / 4;
-        for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
-        // come lo sfondo: locandina sfocata all'85% sopra il fondo scuro, poi il velo scuro in alto
-        const mix = (v: number, bg: number) => Math.round((v / n) * 0.85 * 0.65 + bg * (1 - 0.85 * 0.65));
-        setColor(`rgb(${mix(r, 10)}, ${mix(g, 10)}, ${mix(b, 15)})`);
-      } catch { setColor(BASE_THEME); }
-    };
-    img.onerror = () => alive && setColor(BASE_THEME);
-    img.src = `/api/img?p=${encodeURIComponent(file)}`;
-    return () => { alive = false; };
-  }, [src]);
-}
-
 function Ambient({ src }: { src: string | null }) {
-  useStatusBarColor(src);
   return (
     <div className="ambient" aria-hidden>
       <div className="blobs" />

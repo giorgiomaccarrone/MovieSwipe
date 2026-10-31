@@ -9,12 +9,11 @@ export const metadata: Metadata = {
   title: "Filmetto",
   description: "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   manifest: "/manifest.webmanifest",
-  // "default" e non "black-translucent": se la pagina passa sotto la barra di stato, iOS 26 la sfoca in automatico.
-  // Il colore della barra di stato lo dà il theme-color, che l'app aggiorna con i colori dello sfondo.
-  appleWebApp: { capable: true, title: "Filmetto", statusBarStyle: "default" },
+  // "black" e non "black-translucent": se la pagina passa sotto la barra di stato, iOS 26 la sfoca in automatico
+  appleWebApp: { capable: true, title: "Filmetto", statusBarStyle: "black" },
 };
 
-export const viewport: Viewport = { themeColor: "#15132a", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#0a0a0f", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
