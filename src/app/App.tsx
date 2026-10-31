@@ -6,6 +6,7 @@ import type { Provider, Title, TypeFilter } from "@/lib/types";
 
 type Screen = "start" | "loading" | "swipe" | "done";
 interface Saved { name: string; providers: number[]; filter: TypeFilter; likes: string[] }
+interface Detail { t: Title; canVote: boolean }
 
 const store = {
   get(): Saved | null { try { return JSON.parse(localStorage.getItem("pm-last") || "null"); } catch { return null; } },
@@ -13,6 +14,9 @@ const store = {
 };
 const sameSet = (a: number[], b: number[]) => a.length === b.length && [...a].sort().join() === [...b].sort().join();
 const TYPE_LABEL: Record<TypeFilter, string> = { all: "Tutto", movie: "Film", tv: "Serie" };
+const small = (url: string | null, size = "w185") => (url ? url.replace("/w500/", `/${size}/`) : null);
+const metaLine = (t: Title) =>
+  [t.type === "movie" ? "Film" : "Serie", t.year, t.rating ? `★ ${t.rating.toFixed(1)}` : null].filter(Boolean).join(" · ");
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("start");
@@ -28,6 +32,8 @@ export default function App() {
   const [cache, setCache] = useState<Record<string, Title>>({});
   const [error, setError] = useState("");
   const [saved, setSaved] = useState<Saved | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [backdrop, setBackdrop] = useState<string | null>(null);
 
   const invited = others.length > 0;
 
@@ -103,29 +109,53 @@ export default function App() {
     setLikes((l) => l.filter((k) => k !== prev.key)); setPos(pos - 1);
   };
 
+  // Sfondo: i colori della locandina in primo piano, sfocati
+  const ambient = screen === "swipe" ? deck[pos]?.poster ?? null : screen === "done" ? backdrop : null;
+
   return (
-    <main className="app">
-      {screen === "start" && (
-        <Start {...{ providers, demo, sel, setSel, filter, setFilter, name, setName, others, invited, error, saved }}
-          onStart={start} onCode={(t) => openCode(t) || (setError("Codice non valido: copia tutto il messaggio ricevuto e riprova."), false)}
-          onReuse={() => { if (saved) { setName(saved.name); setLikes(saved.likes); setScreen("done"); } }}
-          onReset={() => { setOthers([]); history.replaceState(null, "", "/"); }} />
+    <>
+      <Ambient src={ambient} />
+      <main className="app">
+        {screen === "start" && (
+          <Start {...{ providers, demo, sel, setSel, filter, setFilter, name, setName, others, invited, error, saved }}
+            onStart={start} onCode={(t) => openCode(t) || (setError("Codice non valido: copia tutto il messaggio ricevuto e riprova."), false)}
+            onReuse={() => { if (saved) { setName(saved.name); setLikes(saved.likes); setScreen("done"); } }}
+            onReset={() => { setOthers([]); history.replaceState(null, "", "/"); }} />
+        )}
+        {screen === "loading" && <div className="loading"><span className="spinner" />Preparo il mazzo…</div>}
+        {screen === "swipe" && deck[pos] && (
+          <Swipe name={name} deck={deck} pos={pos} paused={!!detail} onVote={vote} onUndo={undo}
+            onStop={() => finish(likes)} onOpen={(t) => setDetail({ t, canVote: true })} />
+        )}
+        {screen === "done" && (
+          <Done {...{ name, likes, others, sel, filter, cache, remember }}
+            onBackdrop={setBackdrop}
+            onOpen={(t) => setDetail({ t, canVote: false })}
+            onCode={(t) => openCode(t)}
+            onAgain={() => { setOthers([]); setScreen("start"); history.replaceState(null, "", "/"); }} />
+        )}
+        <footer className="note">
+          Dati di film e serie da <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>, disponibilità
+          streaming da <a href="https://www.justwatch.com/it" target="_blank" rel="noopener">JustWatch</a>. Questo prodotto usa
+          l&apos;API di TMDB ma non è approvato né certificato da TMDB.
+        </footer>
+      </main>
+      {detail && (
+        <Sheet t={detail.t} onClose={() => setDetail(null)}
+          onVote={detail.canVote ? (yes) => { setDetail(null); vote(yes); } : undefined} />
       )}
-      {screen === "loading" && <p className="muted center">Preparo il mazzo…</p>}
-      {screen === "swipe" && deck[pos] && (
-        <Swipe name={name} deck={deck} pos={pos} onVote={vote} onUndo={undo} onStop={() => finish(likes)} />
-      )}
-      {screen === "done" && (
-        <Done {...{ name, likes, others, sel, filter, cache, remember }}
-          onCode={(t) => openCode(t)}
-          onAgain={() => { setOthers([]); setScreen("start"); history.replaceState(null, "", "/"); }} />
-      )}
-      <footer className="note">
-        Dati di film e serie da <a href="https://www.themoviedb.org" target="_blank" rel="noopener">TMDB</a>, disponibilità
-        streaming da <a href="https://www.justwatch.com/it" target="_blank" rel="noopener">JustWatch</a>. Questo prodotto usa
-        l&apos;API di TMDB ma non è approvato né certificato da TMDB.
-      </footer>
-    </main>
+    </>
+  );
+}
+
+/* ================= Sfondo ================= */
+function Ambient({ src }: { src: string | null }) {
+  return (
+    <div className="ambient" aria-hidden>
+      <div className="blobs" />
+      {src && <img key={src} src={small(src, "w92")!} alt="" />}
+      <div className="veil" />
+    </div>
   );
 }
 
@@ -140,65 +170,63 @@ function Start(props: {
   const [code, setCode] = useState("");
   const canReuse = invited && saved && sameSet(saved.providers, sel) && saved.filter === filter &&
     !others.some((p) => p.name.toLowerCase() === saved.name.toLowerCase());
-  // Se l'invito usa piattaforme che non sono nella lista principale, le mostro comunque
-  const shown = providers.length ? providers : [];
   const toggle = (id: number) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
 
   return (
     <>
-      <header className="stack-s">
-        <h1>Popcorn <span>Match</span></h1>
+      <header className="hero">
+        <span className="logo" aria-hidden>
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5h2c.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z" /></svg>
+        </span>
+        <h1>Popcorn Match</h1>
         {invited ? (
-          <p><b>{others.map((p) => p.name).join(", ")}</b> {others.length > 1 ? "hanno" : "ha"} già votato. Fai swipe anche tu:
-            i titoli che piacciono a tutti diventano la vostra lista.</p>
+          <p className="lead"><b>{others.map((p) => p.name).join(", ")}</b> {others.length > 1 ? "hanno" : "ha"} già votato.
+            Fai swipe anche tu: i titoli che piacciono a tutti diventano la vostra lista.</p>
         ) : (
-          <>
-            <p className="muted">Fate swipe su film e serie, ognuno dal suo telefono. Quello che piace a tutti finisce nella lista da guardare.</p>
-            <ol className="steps"><li>Scegli le piattaforme e fai swipe</li><li>Manda il link agli altri</li><li>Chi vota per ultimo vede i match</li></ol>
-          </>
+          <p className="lead">Fate swipe su film e serie, ognuno dal suo telefono. Quello che piace a tutti finisce nella lista da guardare.</p>
         )}
-        {demo && <p className="warn">Modalità demo: manca la chiave TMDB, uso un piccolo catalogo di esempio.</p>}
+        {demo && <p className="pill warn">Modalità demo: manca la chiave TMDB</p>}
       </header>
 
-      <form className="panel" onSubmit={(e) => { e.preventDefault(); props.onStart(); }}>
+      <form className="glass panel" onSubmit={(e) => { e.preventDefault(); props.onStart(); }}>
         <div className="field">
           <label className="lbl" htmlFor="name">Il tuo nome</label>
-          <input id="name" type="text" maxLength={16} autoComplete="given-name" placeholder="Es. Giorgio"
+          <input id="name" type="text" maxLength={16} autoComplete="given-name" autoCapitalize="words"
             value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="field">
-          <span className="lbl">Piattaforme{invited ? " (scelte da chi ha iniziato)" : ""}</span>
+          <span className="lbl">Piattaforme{invited ? " scelte da chi ha iniziato" : ""}</span>
           <div className="chips">
-            {shown.filter((p) => !invited || sel.includes(p.id)).map((p) => (
-              <button key={p.id} type="button" className="chip prov" aria-pressed={sel.includes(p.id)} disabled={invited} onClick={() => toggle(p.id)}>
-                {p.logo && <img src={p.logo} alt="" width={22} height={22} />}{p.name}
+            {providers.filter((p) => !invited || sel.includes(p.id)).map((p) => (
+              <button key={p.id} type="button" className={"chip prov" + (p.logo ? "" : " nologo")} aria-pressed={sel.includes(p.id)} disabled={invited} onClick={() => toggle(p.id)}>
+                {p.logo && <img src={p.logo} alt="" width={24} height={24} />}{p.name}
               </button>
             ))}
-            {!shown.length && <span className="muted small">Carico le piattaforme…</span>}
+            {!providers.length && <span className="muted small">Carico le piattaforme…</span>}
           </div>
         </div>
         <div className="field">
           <span className="lbl">Cosa guardate</span>
-          <div className="chips">
+          <div className="segmented" role="radiogroup" aria-label="Cosa guardate">
             {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
-              <button key={f} type="button" className="chip" aria-pressed={filter === f} disabled={invited} onClick={() => setFilter(f)}>{TYPE_LABEL[f]}</button>
+              <button key={f} type="button" role="radio" aria-checked={filter === f} disabled={invited} onClick={() => setFilter(f)}>{TYPE_LABEL[f]}</button>
             ))}
           </div>
         </div>
         {error && <p className="err">{error}</p>}
-        <button className="btn" disabled={!sel.length}>Inizia lo swipe</button>
-        {canReuse && <button type="button" className="btn ghost" onClick={props.onReuse}>Ho già votato come {saved!.name}: vedi i match</button>}
+        <button className="btn primary" disabled={!sel.length}>Inizia lo swipe</button>
+        {canReuse && <button type="button" className="btn" onClick={props.onReuse}>Ho già votato come {saved!.name}: vedi i match</button>}
       </form>
 
       {invited ? (
         <button type="button" className="linkbtn" onClick={props.onReset}>Ignora l&apos;invito e inizia una nuova partita</button>
       ) : (
-        <section className="panel">
+        <section className="glass panel">
           <div className="field">
-            <label className="lbl" htmlFor="code">Hai ricevuto un codice?</label>
-            <textarea id="code" rows={2} placeholder="Incolla qui il messaggio ricevuto" value={code} onChange={(e) => setCode(e.target.value)} />
+            <label className="lbl" htmlFor="code">Hai ricevuto un link?</label>
+            <textarea id="code" rows={2} placeholder="Incollalo qui" value={code} onChange={(e) => setCode(e.target.value)} />
           </div>
-          <button type="button" className="btn ghost" onClick={() => props.onCode(code)}>Apri il codice</button>
+          <button type="button" className="btn" onClick={() => props.onCode(code)}>Apri</button>
         </section>
       )}
     </>
@@ -206,15 +234,18 @@ function Start(props: {
 }
 
 /* ================= Swipe ================= */
-function Swipe({ name, deck, pos, onVote, onUndo, onStop }: {
-  name: string; deck: Title[]; pos: number; onVote: (yes: boolean) => void; onUndo: () => void; onStop: () => void;
+function Swipe({ name, deck, pos, paused, onVote, onUndo, onStop, onOpen }: {
+  name: string; deck: Title[]; pos: number; paused: boolean;
+  onVote: (yes: boolean) => void; onUndo: () => void; onStop: () => void; onOpen: (t: Title) => void;
 }) {
   const card = useRef<HTMLElement>(null);
   const busy = useRef(false);
   const cur = deck[pos], next = deck[pos + 1];
 
   // Precarico le prossime locandine
-  useEffect(() => { for (const t of deck.slice(pos + 1, pos + 4)) if (t.poster) new Image().src = t.poster; }, [deck, pos]);
+  useEffect(() => {
+    for (const t of deck.slice(pos + 1, pos + 4)) if (t.poster) { new Image().src = t.poster; new Image().src = small(t.poster, "w92")!; }
+  }, [deck, pos]);
 
   const fly = useCallback((yes: boolean) => {
     if (busy.current) return;
@@ -230,53 +261,63 @@ function Swipe({ name, deck, pos, onVote, onUndo, onStop }: {
   }, [onVote]);
 
   useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === "ArrowRight") fly(true); if (e.key === "ArrowLeft") fly(false); };
+    if (paused) return;
+    const k = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") fly(true);
+      if (e.key === "ArrowLeft") fly(false);
+      if ((e.key === "Enter" || e.key === " ") && !(e.target as HTMLElement).closest("button,a,input,textarea")) { e.preventDefault(); onOpen(cur); }
+    };
     addEventListener("keydown", k); return () => removeEventListener("keydown", k);
-  }, [fly]);
+  }, [fly, paused, onOpen, cur]);
 
-  // Trascinamento
+  // Trascinamento; un tocco senza movimento apre la scheda
   useEffect(() => {
     const el = card.current; if (!el) return;
     el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0");
-    let sx = 0, sy = 0, dx = 0, on = false;
-    const down = (e: PointerEvent) => { if (busy.current) return; on = true; sx = e.clientX; sy = e.clientY; dx = 0; el.setPointerCapture(e.pointerId); el.style.transition = "none"; };
+    let sx = 0, sy = 0, dx = 0, dy = 0, on = false;
+    const reset = () => { el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0"); };
+    const down = (e: PointerEvent) => { if (busy.current) return; on = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; el.setPointerCapture(e.pointerId); el.style.transition = "none"; };
     const move = (e: PointerEvent) => {
-      if (!on) return; dx = e.clientX - sx; const dy = (e.clientY - sy) * 0.3;
-      el.style.transform = `translate(${dx}px,${dy}px) rotate(${dx / 18}deg)`;
+      if (!on) return; dx = e.clientX - sx; dy = e.clientY - sy;
+      el.style.transform = `translate(${dx}px,${dy * 0.3}px) rotate(${dx / 18}deg)`;
       el.style.setProperty("--y", String(Math.max(0, Math.min(1, dx / 100))));
       el.style.setProperty("--n", String(Math.max(0, Math.min(1, -dx / 100))));
     };
     const up = () => {
       if (!on) return; on = false; el.style.transition = "";
-      if (dx > 100) fly(true); else if (dx < -100) fly(false);
-      else { el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0"); }
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) { reset(); onOpen(cur); return; }
+      if (dx > 100) fly(true); else if (dx < -100) fly(false); else reset();
     };
     el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
     return () => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up); };
-  }, [cur.key, fly]);
+  }, [cur, fly, onOpen]);
 
   return (
     <>
-      <div className="top"><h3>Ciao {name}</h3><span className="progress">{pos + 1} / {deck.length}</span></div>
-      <div className="bar"><i style={{ width: `${(pos / deck.length) * 100}%` }} /></div>
+      <div className="top">
+        <span className="hello">Ciao {name}</span>
+        <span className="glass pill progress">{pos + 1} di {deck.length}</span>
+      </div>
       <div className="stack">
         {next && <Card t={next} under />}
         <Card t={cur} ref={card} key={cur.key} />
       </div>
       <div className="actions">
-        <button className="round small-round" onClick={onUndo} disabled={pos === 0} aria-label="Annulla l'ultimo voto">
+        <button className="glass round sm" onClick={onUndo} disabled={pos === 0} aria-label="Annulla l'ultimo voto">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 010 12h-3" /></svg>
         </button>
-        <button className="round n" onClick={() => fly(false)} aria-label="No">
+        <button className="glass round n" onClick={() => fly(false)} aria-label="No">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <button className="round y" onClick={() => fly(true)} aria-label="Mi piace">
+        <button className="glass round y" onClick={() => fly(true)} aria-label="Mi piace">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.5h2c.7-1.3 2.2-2.5 4.3-2.5 3.7 0 5.8 3.8 4.3 7.2C19.5 16.4 12 21 12 21z" /></svg>
         </button>
-        <span className="small-round" aria-hidden />
+        <button className="glass round sm" onClick={onStop} aria-label="Ho finito, vedi il risultato">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
+        </button>
       </div>
-      <p className="muted small center">Trascina la carta o usa i pulsanti. <button type="button" className="linkbtn" onClick={onStop}>Ho finito</button></p>
+      <p className="hint">Scorri a destra se ti piace, a sinistra se no. Tocca la carta per leggere la trama.</p>
     </>
   );
 }
@@ -284,31 +325,76 @@ function Swipe({ name, deck, pos, onVote, onUndo, onStop }: {
 function Card({ t, under, ref }: { t: Title; under?: boolean; ref?: React.Ref<HTMLElement> }) {
   return (
     <article ref={ref} className={"card" + (under ? " under" : "")} aria-label={t.title}>
-      <div className="poster">
-        {t.poster ? <img src={t.poster} alt="" draggable={false} /> : <div className="noposter" />}
-        <div className="shade" />
-        <div className="ptext">
-          <div className="meta">
-            <span className="tag">{t.type === "movie" ? "Film" : "Serie"}{t.year ? ` · ${t.year}` : ""}</span>
-            {t.rating ? <span className="tag">★ {t.rating.toFixed(1)}</span> : null}
-          </div>
-          <h2>{t.title}</h2>
-          <div className="meta">{t.providers.map((p) => <span key={p} className="tag plat">{p}</span>)}</div>
+      {t.poster ? <img className="poster" src={t.poster} alt="" draggable={false} /> : <div className="poster noposter" />}
+      <div className="card-info">
+        <div className="meta">
+          <span>{metaLine(t)}</span>
         </div>
-      </div>
-      <div className="info">
-        {t.genres.length > 0 && <p className="genre">{t.genres.join(" · ")}</p>}
-        <p className="muted overview">{t.overview || "Nessuna trama disponibile in italiano."}</p>
+        <h2>{t.title}</h2>
+        {t.overview && <p className="overview">{t.overview}</p>}
+        <div className="card-foot">
+          <div className="provs">{t.providers.slice(0, 3).map((p) => <span key={p} className="tag">{p}</span>)}</div>
+          <span className="more">Leggi tutto</span>
+        </div>
       </div>
       <span className="stamp y">MI PIACE</span><span className="stamp n">NO</span>
     </article>
   );
 }
 
+/* ================= Scheda dettaglio ================= */
+function Sheet({ t, onClose, onVote }: { t: Title; onClose: () => void; onVote?: (yes: boolean) => void }) {
+  const closeBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeBtn.current?.focus();
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    addEventListener("keydown", k);
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => { removeEventListener("keydown", k); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  return (
+    <div className="sheet-wrap" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={t.title} onClick={(e) => e.stopPropagation()}>
+        {t.poster && <img className="sheet-bg" src={small(t.poster, "w342")!} alt="" aria-hidden />}
+        <div className="sheet-body">
+          <button ref={closeBtn} className="glass round close" onClick={onClose} aria-label="Chiudi">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+          <div className="sheet-head">
+            {t.poster ? <img src={small(t.poster, "w342")!} alt="" /> : <span className="noposter" />}
+            <div>
+              <h2>{t.title}</h2>
+              <p className="muted">{metaLine(t)}</p>
+              {t.genres.length > 0 && <p className="genre">{t.genres.join(" · ")}</p>}
+            </div>
+          </div>
+          <p className="full">{t.overview || "Nessuna trama disponibile in italiano."}</p>
+          {t.providers.length > 0 && (
+            <div className="field">
+              <span className="lbl">Disponibile su</span>
+              <div className="chips">{t.providers.map((p) => <span key={p} className="glass pill">{p}</span>)}</div>
+            </div>
+          )}
+          {onVote ? (
+            <div className="row">
+              <button className="btn no" onClick={() => onVote(false)}>No</button>
+              <button className="btn yes" onClick={() => onVote(true)}>Mi piace</button>
+            </div>
+          ) : (
+            <a className="btn primary" href={`https://www.justwatch.com/it/cerca?q=${encodeURIComponent(t.title)}`} target="_blank" rel="noopener">Dove guardarlo</a>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================= Risultati e condivisione ================= */
-function Done({ name, likes, others, sel, filter, cache, remember, onCode, onAgain }: {
+function Done({ name, likes, others, sel, filter, cache, remember, onBackdrop, onOpen, onCode, onAgain }: {
   name: string; likes: string[]; others: Person[]; sel: number[]; filter: TypeFilter;
-  cache: Record<string, Title>; remember: (t: Title[]) => void; onCode: (t: string) => boolean; onAgain: () => void;
+  cache: Record<string, Title>; remember: (t: Title[]) => void; onBackdrop: (src: string | null) => void;
+  onOpen: (t: Title) => void; onCode: (t: string) => boolean; onAgain: () => void;
 }) {
   const people = useMemo(() => [...others, { name, likes }], [others, name, likes]);
   const code = encode({ providers: sel, filter, people });
@@ -328,12 +414,14 @@ function Done({ name, likes, others, sel, filter, cache, remember, onCode, onAga
   const almost = total >= 3 ? [...counts].filter(([, c]) => c === total - 1).map(([k]) => k) : [];
 
   // Recupero i dettagli dei titoli che non ho nel mazzo (es. quando apro la risposta di un amico)
-  const missing = [...matches, ...almost].filter((k) => !cache[k]);
-  const missingKey = missing.join(",");
+  const missingKey = [...matches, ...almost].filter((k) => !cache[k]).join(",");
   useEffect(() => {
     if (!missingKey) return;
     fetch(`/api/details?k=${missingKey}`).then((r) => r.json()).then((d) => d.items && remember(d.items)).catch(() => {});
   }, [missingKey, remember]);
+
+  const firstPoster = matches.map((k) => cache[k]?.poster).find(Boolean) ?? null;
+  useEffect(() => { onBackdrop(firstPoster); }, [firstPoster, onBackdrop]);
 
   const link = `${origin}/?c=${code}`;
   const msg = others.length
@@ -344,66 +432,67 @@ function Done({ name, likes, others, sel, filter, cache, remember, onCode, onAga
     try {
       if (navigator.share) { await navigator.share({ title: "Popcorn Match", text: msg }); return; }
     } catch { return; /* condivisione annullata */ }
-    try { await navigator.clipboard.writeText(msg); setCopied("Link copiato!"); }
+    try { await navigator.clipboard.writeText(msg); setCopied("Link copiato"); }
     catch { setCopied("Seleziona il testo qui sopra e copialo"); }
   }
 
   return (
     <>
-      <header className="stack-s">
-        <h1>{others.length ? <>La vostra <span>lista</span></> : <>Fatto, <span>{name}</span></>}</h1>
-        <p className="muted">Hai messo mi piace a {likes.length} titoli.</p>
+      <header className="hero left">
+        <h1>{others.length ? "La vostra lista" : `Fatto, ${name}`}</h1>
+        <p className="lead">Hai messo mi piace a {likes.length} titoli.</p>
       </header>
 
       {others.length > 0 && (
         <section className="stack-m">
-          <div className="chips">{people.map((p) => <span key={p.name} className="person">{p.name}</span>)}</div>
-          <div className="headline"><span className="big">{matches.length}</span><h3>{matches.length === 1 ? "titolo piace a tutti" : "titoli piacciono a tutti"}</h3></div>
-          {matches.length ? <List keys={matches} cache={cache} /> :
-            <p className="muted">Nessun titolo piace a tutti. Provate a rifare lo swipe con più piattaforme o con “Tutto”.</p>}
+          <div className="chips">{people.map((p) => <span key={p.name} className="glass pill">{p.name}</span>)}</div>
+          <div className="headline"><span className="big">{matches.length}</span><span>{matches.length === 1 ? "titolo piace a tutti" : "titoli piacciono a tutti"}</span></div>
+          {matches.length ? <Grid keys={matches} cache={cache} onOpen={onOpen} /> :
+            <p className="glass panel muted">Nessun titolo piace a tutti. Provate a rifare lo swipe con più piattaforme o con “Tutto”.</p>}
           {almost.length > 0 && (<>
             <h3>Quasi match</h3><p className="muted small">Piacciono a tutti tranne una persona.</p>
-            <List keys={almost} cache={cache} />
+            <Grid keys={almost} cache={cache} onOpen={onOpen} />
           </>)}
         </section>
       )}
 
-      <section className="panel">
+      <section className="glass panel">
         <h3>{others.length ? "Manda la lista agli altri" : "Ora tocca agli altri"}</h3>
         <p className="muted small">{others.length
           ? "Il link contiene i voti di tutti: chi lo apre vede gli stessi match. Se manca ancora qualcuno, mandalo a lui."
           : "Manda il link a chi guarda con te, anche in un gruppo. Chi vota dopo vede i match e può rimandarteli."}</p>
-        <textarea readOnly rows={3} value={msg} onFocus={(e) => e.currentTarget.select()} />
-        <button className="btn" onClick={share}>Condividi il link</button>
+        <button className="btn primary" onClick={share}>Condividi il link</button>
         {copied && <p className="small center">{copied}</p>}
+        <textarea readOnly rows={2} value={link} aria-label="Link da condividere" onFocus={(e) => e.currentTarget.select()} />
       </section>
 
-      <section className="panel">
+      <section className="glass panel">
         <div className="field">
           <label className="lbl" htmlFor="paste">Ti hanno risposto?</label>
           <textarea id="paste" rows={2} placeholder="Apri il loro link oppure incollalo qui" value={paste} onChange={(e) => setPaste(e.target.value)} />
         </div>
         {err && <p className="err">{err}</p>}
-        <button type="button" className="btn ghost" onClick={() => { if (!onCode(paste)) setErr("Link non valido: copia tutto il messaggio ricevuto e riprova."); }}>Vedi i match</button>
+        <button type="button" className="btn" onClick={() => { if (!onCode(paste)) setErr("Link non valido: copia tutto il messaggio ricevuto e riprova."); }}>Vedi i match</button>
       </section>
       <button type="button" className="linkbtn" onClick={onAgain}>Nuova partita</button>
     </>
   );
 }
 
-function List({ keys, cache }: { keys: string[]; cache: Record<string, Title> }) {
+function Grid({ keys, cache, onOpen }: { keys: string[]; cache: Record<string, Title>; onOpen: (t: Title) => void }) {
   return (
-    <ul className="list">
+    <ul className="grid">
       {keys.map((k) => {
         const t = cache[k];
         return (
-          <li key={k} className="item">
-            {t?.poster ? <img className="thumb" src={t.poster.replace("/w500/", "/w154/")} alt="" /> : <span className="thumb" />}
-            <div>
-              <b>{t?.title ?? "Caricamento…"}</b>
-              {t && <span className="muted small">{t.type === "movie" ? "Film" : "Serie"}{t.year ? ` · ${t.year}` : ""}{t.providers.length ? ` · ${t.providers.join(", ")}` : ""}</span>}
-            </div>
-            {t && <a href={`https://www.justwatch.com/it/cerca?q=${encodeURIComponent(t.title)}`} target="_blank" rel="noopener">Dove</a>}
+          <li key={k}>
+            <button className="tile" onClick={() => t && onOpen(t)} disabled={!t} aria-label={t ? `${t.title}: apri la scheda` : "Caricamento"}>
+              {t?.poster ? <img src={small(t.poster, "w342")!} alt="" /> : <span className="noposter" />}
+              <span className="tile-cap glass">
+                <b>{t?.title ?? "…"}</b>
+                {t && <span>{t.providers[0] ?? metaLine(t)}</span>}
+              </span>
+            </button>
           </li>
         );
       })}

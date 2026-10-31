@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
-// Font serviti dall'app stessa (niente chiamate a Google in fase di build)
-import "@fontsource/bricolage-grotesque/latin-600.css";
-import "@fontsource/bricolage-grotesque/latin-800.css";
+// Su iPhone/Mac si usa il font di sistema (SF Pro); Figtree è il ripiego per gli altri dispositivi
 import "@fontsource/figtree/latin-400.css";
 import "@fontsource/figtree/latin-500.css";
 import "@fontsource/figtree/latin-700.css";
@@ -14,7 +12,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Popcorn Match", statusBarStyle: "black-translucent" },
 };
 
-export const viewport: Viewport = { themeColor: "#13111c", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#0a0a0f", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
