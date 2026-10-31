@@ -9,7 +9,8 @@ export const metadata: Metadata = {
   title: "Filmetto",
   description: "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Filmetto", statusBarStyle: "black-translucent" },
+  // "black" e non "black-translucent": se la pagina passa sotto la barra di stato, iOS 26 la sfoca in automatico
+  appleWebApp: { capable: true, title: "Filmetto", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = { themeColor: "#0a0a0f", width: "device-width", initialScale: 1, viewportFit: "cover" };
