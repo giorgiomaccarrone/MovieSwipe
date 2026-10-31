@@ -96,7 +96,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .hello { font-size: 17px; font-weight: 600; }
 .progress { font-variant-numeric: tabular-nums; color: var(--muted); }
 .stack { position: relative; height: min(68dvh, 620px); min-height: 440px; }
-.card { position: absolute; inset: 0; border-radius: var(--r-lg); overflow: hidden; background: #1c1c22; border: 1px solid var(--stroke);
+.card { --s: 0; position: absolute; inset: 0; border-radius: var(--r-lg); overflow: hidden; background: #1c1c22; border: 1px solid var(--stroke);
   touch-action: none; user-select: none; -webkit-user-select: none; cursor: pointer; transition: transform .25s cubic-bezier(.2,.8,.2,1);
   box-shadow: 0 30px 60px -20px rgba(0,0,0,.7); --y: 0; --n: 0; }
 .card.under { transform: scale(.94) translateY(14px); opacity: .6; pointer-events: none; }
@@ -286,3 +286,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 /* ---------- Filtro Tutti / Film / Serie nei match ---------- */
 .kind-filter button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .kind-filter .count { font-size: 12px; font-weight: 600; opacity: .55; font-variant-numeric: tabular-nums; }
+
+/* ---------- Già visto ---------- */
+.stamp.s { left: 50%; top: 40%; transform: translate(-50%, -50%) rotate(-6deg); color: #64d2ff; opacity: var(--s); white-space: nowrap; }
+.round.sm.s { color: #64d2ff; }
+.round:disabled { cursor: default; }
+.seen-before { position: absolute; top: 14px; left: 14px; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+  background: rgba(100, 210, 255, .9); color: #002233; }
+.seen-ask { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 3; border-radius: var(--r-md); padding: 16px; display: grid; gap: 12px; text-align: center;
+  background: rgba(20, 20, 26, .92); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  animation: pop .22s cubic-bezier(.2,.8,.2,1) both; }
+.seen-ask .btn { font-size: 15px; padding: 13px 8px; white-space: nowrap; }
+.seen-ask p { font-size: 17px; }
+.seen-note { font-size: 12px; color: #64d2ff; font-weight: 600; }

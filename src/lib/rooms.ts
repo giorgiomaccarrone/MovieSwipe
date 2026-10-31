@@ -15,11 +15,12 @@ import type { Title, TypeFilter } from "./types";
  *   r:CODE:votes    hash  "id|titolo" → 1 (mi piace) / 0 (no)
  *   r:CODE:counts   hash  titolo → quanti "mi piace"
  *   r:CODE:matches  zset  titolo → momento del match
- *   r:CODE:watched  hash  titolo → momento in cui è stato segnato come visto
+ *   r:CODE:watched  hash  titolo → momento in cui è stato segnato come visto (dopo il match, per tutta la stanza)
+ *   r:CODE:already  hash  "id|titolo" → 1: quella persona l'aveva già visto quando ha votato
  *   r:CODE:v        contatore che cambia a ogni novità (i client lo controllano a intervalli)
  */
 const TTL = 60 * 60 * 24 * 30;
-const PARTS = ["meta", "deck", "members", "seen", "votes", "counts", "matches", "watched", "v"];
+const PARTS = ["meta", "deck", "members", "seen", "votes", "counts", "matches", "watched", "already", "v"];
 const MAX_MEMBERS = 12;
 const MAX_DECK = 400; // il mazzo cresce a ogni giro; oltre questo limite i giri non aggiungono altro
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // niente 0/O, 1/I/L
@@ -43,6 +44,8 @@ export interface RoomState {
   counts: Record<string, number>;
   matches: { key: string; at: number }[];
   watched: Record<string, number>;
+  /** solo per i titoli diventati match: chi li aveva già visti */
+  alreadyBy: Record<string, string[]>;
   deckSize: number;
   name: string | null;
 }
@@ -165,11 +168,17 @@ export async function roomState(code: string, since?: number): Promise<RoomState
     throw new RoomError(who ? deletedMsg(who) : "Questa stanza non esiste più.", 404);
   }
   if (since && Number(v) === since) return { v: since, same: true };
-  const [members, seen, counts, matches, watched, rawMeta] = await Promise.all([
+  const [members, seen, counts, matches, watched, rawMeta, already] = await Promise.all([
     kv.hgetall(k(code, "members")), kv.hgetall(k(code, "seen")),
     kv.hgetall(k(code, "counts")), kv.zall(k(code, "matches")),
-    kv.hgetall(k(code, "watched")), kv.get(k(code, "meta")),
+    kv.hgetall(k(code, "watched")), kv.get(k(code, "meta")), kv.hgetall(k(code, "already")),
   ]);
+  const matchKeys = new Set(matches.map((m) => m.member));
+  const alreadyBy: Record<string, string[]> = {};
+  for (const f of Object.keys(already)) {
+    const i = f.indexOf("|"); const id = f.slice(0, i), key = f.slice(i + 1);
+    if (matchKeys.has(key) && members[id]) (alreadyBy[key] ??= []).push(id);
+  }
   const meta = rawMeta ? (JSON.parse(rawMeta) as RoomMeta) : null;
   return {
     v: Number(v),
@@ -177,6 +186,7 @@ export async function roomState(code: string, since?: number): Promise<RoomState
     counts: Object.fromEntries(Object.entries(counts).filter(([key, c]) => key !== "_" && Number(c) > 0).map(([key, c]) => [key, Number(c)])),
     matches: matches.filter((m) => m.member !== "_").map((m) => ({ key: m.member, at: m.score })),
     watched: Object.fromEntries(Object.entries(watched).filter(([key]) => key !== "_").map(([key, t]) => [key, Number(t)])),
+    alreadyBy,
     deckSize: meta?.deckSize ?? 0,
     name: meta?.name ?? null,
   };
@@ -203,10 +213,11 @@ async function requireMember(code: string, member: string) {
   if (!(await kv.hget(k(code, "members"), member))) throw new RoomError("Non sei in questa stanza.", 403);
 }
 
-export async function vote(code: string, member: string, key: string, like: boolean) {
+export async function vote(code: string, member: string, key: string, like: boolean, seenBefore = false) {
   await requireMember(code, member);
   const fresh = await kv.hsetnx(k(code, "votes"), `${member}|${key}`, like ? "1" : "0");
   if (!fresh) return { match: false };
+  if (seenBefore) await kv.hset(k(code, "already"), { [`${member}|${key}`]: 1 });
   await kv.hincrby(k(code, "seen"), member, 1);
   let match = false;
   if (like) {
@@ -225,6 +236,7 @@ export async function unvote(code: string, member: string, key: string) {
   const was = await kv.hget(k(code, "votes"), f);
   if (was == null) return;
   await kv.hdel(k(code, "votes"), f);
+  await kv.hdel(k(code, "already"), f);
   await kv.hincrby(k(code, "seen"), member, -1);
   if (was === "1") await kv.hincrby(k(code, "counts"), key, -1);
   await kv.incr(k(code, "v"));
@@ -271,6 +283,7 @@ export async function leave(code: string, member: string) {
   for (const [f, val] of Object.entries(votes)) {
     if (!f.startsWith(member + "|")) continue;
     await kv.hdel(k(code, "votes"), f);
+    await kv.hdel(k(code, "already"), f);
     if (val === "1") await kv.hincrby(k(code, "counts"), f.slice(member.length + 1), -1);
   }
   const n = await kv.hlen(k(code, "members"));

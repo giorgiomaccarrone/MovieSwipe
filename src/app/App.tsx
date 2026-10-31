@@ -13,7 +13,7 @@ interface Session {
 interface Member { id: string; name: string; seen: number }
 interface RoomState {
   v: number; members: Member[]; counts: Record<string, number>; matches: { key: string; at: number }[];
-  watched: Record<string, number>; deckSize: number; name: string | null;
+  watched: Record<string, number>; alreadyBy?: Record<string, string[]>; deckSize: number; name: string | null;
 }
 
 /* ---------- Memoria locale (solo comodità: nome, filtri, stanze in cui sono entrato) ---------- */
@@ -27,6 +27,12 @@ const forgetRoom = (code: string) => { const r = mem.get<RoomsMem>("pm-rooms", {
 // Le stanze scadute vengono tolte da sole quando il riepilogo risponde che non esistono più
 const knownRooms = (): string[] =>
   Object.entries(mem.get<RoomsMem>("pm-rooms", {})).sort((a, b) => b[1].at - a[1].at).map(([c]) => c);
+
+/** Titoli che ho dichiarato "già visto", in qualsiasi stanza: restano solo su questo telefono */
+const seenMem = {
+  has(key: string) { return mem.get<string[]>("pm-seen", []).includes(key); },
+  add(key: string) { const l = mem.get<string[]>("pm-seen", []).filter((k) => k !== key); l.push(key); mem.set("pm-seen", l.slice(-3000)); },
+};
 
 async function api<T>(url: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const r = await fetch(url, {
@@ -462,11 +468,12 @@ function Room({ session, providers, onExit, onSwitch }: {
   }, [deck, voted, state?.counts]);
   pinned.current = queue[0]?.key ?? null;
 
-  const vote = useCallback((t: Title, like: boolean) => {
+  const vote = useCallback((t: Title, like: boolean, seen = false) => {
     lastActive.current = Date.now();
+    if (seen) seenMem.add(t.key);
     setVoted((v) => new Set(v).add(t.key));
     setHistory((h) => [...h, t.key]);
-    api<{ match: boolean }>(`/api/rooms/${code}/vote`, { method: "POST", body: { member, key: t.key, like } })
+    api<{ match: boolean }>(`/api/rooms/${code}/vote`, { method: "POST", body: { member, key: t.key, like, seen } })
       .then((r) => {
         if (r.match && seenMatches.current && !seenMatches.current.has(t.key)) {
           seenMatches.current.add(t.key); setPopups((p) => [...p, t.key]);
@@ -513,6 +520,13 @@ function Room({ session, providers, onExit, onSwitch }: {
   const members = state?.members ?? [{ id: member, name: session.name, seen: voted.size }];
   const matches = [...(state?.matches ?? [])].sort((a, b) => b.at - a.at).map((m) => byKey.get(m.key)).filter((t): t is Title => !!t);
   const toWatch = matches.filter((t) => !isWatched(t.key));
+  const nameOf = (id: string) => (id === member ? "te" : members.find((m) => m.id === id)?.name ?? "qualcuno");
+  const seenNote = (key: string) => {
+    const ids = state?.alreadyBy?.[key] ?? [];
+    if (!ids.length) return undefined;
+    if (ids.length >= members.length) return "L'avevate già visto tutti";
+    return `Già visto da ${ids.map(nameOf).join(" e ")}`;
+  };
   // Filtro Tutti / Film / Serie nella lista match: compare solo se la stanza ha film e serie
   const [kind, setKind] = useState<TypeFilter>("all");
   const mixed = meta.filter === "all" || (matches.some((t) => t.type === "movie") && matches.some((t) => t.type === "tv"));
@@ -612,7 +626,7 @@ function Room({ session, providers, onExit, onSwitch }: {
                 ))}
               </div>
             )}
-            {toWatchShown.length ? <Grid items={toWatchShown} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
+            {toWatchShown.length ? <Grid items={toWatchShown} note={seenNote} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
               <p className="glass panel muted">{
                 toWatch.length ? `Nessun${shownKind === "tv" ? "a serie" : " film"} da vedere tra i match: prova “Tutti” o fate un nuovo giro.`
                 : matches.length ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
@@ -620,7 +634,7 @@ function Room({ session, providers, onExit, onSwitch }: {
             )}
             {watchedList.length > 0 && (<>
               <h3 className="section-title">Già visti <span className="muted">{watchedList.length}</span></h3>
-              <Grid items={watchedList} watched onOpen={(t) => setDetail({ t, canVote: false })} />
+              <Grid items={watchedList} watched note={seenNote} onOpen={(t) => setDetail({ t, canVote: false })} />
             </>)}
             <button className="glass panel round-cta" onClick={() => setRound(true)}>
               <span><b>Nuovo giro</b><span className="muted small">Altri titoli da votare, anche con generi o piattaforme diversi.</span></span>
@@ -635,7 +649,8 @@ function Room({ session, providers, onExit, onSwitch }: {
         <Sheet t={detail.t} onClose={() => setDetail(null)}
           onVote={detail.canVote ? (yes) => { const t = detail.t; setDetail(null); vote(t, yes); } : undefined}
           watched={detail.canVote ? undefined : isWatched(detail.t.key)}
-          onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }} />
+          onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }}
+          note={detail.canVote ? undefined : seenNote(detail.t.key)} />
       )}
       {invite && <Invite code={code} member={member} roomName={meta.name} onClose={() => setInvite(false)} onSwitch={onSwitch}
         onRenamed={(n) => { setMeta((m) => ({ ...m, name: n ?? undefined })); setToast(n ? `Stanza rinominata in “${n}”` : "Nome della stanza tolto"); poll(); }}
@@ -698,90 +713,127 @@ function NewRound({ code, member, meta, providers, onClose, onDone }: {
 /* ================= Swipe ================= */
 function Swipe({ queue, paused, canUndo, onVote, onUndo, onOpen }: {
   queue: Title[]; paused: boolean; canUndo: boolean;
-  onVote: (t: Title, yes: boolean) => void; onUndo: () => void; onOpen: (t: Title) => void;
+  onVote: (t: Title, yes: boolean, seen?: boolean) => void; onUndo: () => void; onOpen: (t: Title) => void;
 }) {
   const card = useRef<HTMLElement>(null);
   const busy = useRef(false);
+  const [ask, setAsk] = useState(false); // domanda "Lo rivedrei / Non lo rivedrei"
   const cur = queue[0], next = queue[1];
 
   useEffect(() => {
     for (const t of queue.slice(1, 4)) if (t.poster) { new Image().src = t.poster; new Image().src = small(t.poster, "w92")!; }
   }, [queue]);
+  useEffect(() => { setAsk(false); }, [cur?.key]);
 
-  const fly = useCallback((yes: boolean) => {
+  const fly = useCallback((yes: boolean, seen = false) => {
     if (busy.current || !cur) return;
     busy.current = true;
     const el = card.current;
     if (el) {
       el.style.transition = "";
-      el.style.setProperty(yes ? "--y" : "--n", "1");
-      el.style.transform = `translate(${yes ? 140 : -140}%,-4%) rotate(${yes ? 22 : -22}deg)`;
+      el.style.setProperty(seen ? "--s" : yes ? "--y" : "--n", "1");
+      el.style.transform = seen ? "translate(0,-130%) rotate(-4deg)" : `translate(${yes ? 140 : -140}%,-4%) rotate(${yes ? 22 : -22}deg)`;
     }
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    setTimeout(() => { busy.current = false; onVote(cur, yes); }, reduce ? 0 : 220);
+    setTimeout(() => { busy.current = false; onVote(cur, yes, seen); }, reduce ? 0 : 220);
   }, [onVote, cur]);
+
+  const askSeen = useCallback(() => {
+    if (busy.current || !cur) return;
+    const el = card.current;
+    if (el) { el.style.transition = ""; el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0"); el.style.setProperty("--s", "1"); }
+    setAsk(true);
+  }, [cur]);
+  const cancelAsk = useCallback(() => { card.current?.style.setProperty("--s", "0"); setAsk(false); }, []);
+  const choose = (rewatch: boolean) => { setAsk(false); fly(rewatch, true); };
 
   useEffect(() => {
     if (paused) return;
     const k = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input,textarea")) return;
+      if (ask) { if (e.key === "Escape") cancelAsk(); return; }
       if (e.key === "ArrowRight") fly(true);
       if (e.key === "ArrowLeft") fly(false);
+      if (e.key === "ArrowUp") { e.preventDefault(); askSeen(); }
       if ((e.key === "Enter" || e.key === " ") && !(e.target as HTMLElement).closest("button,a")) { e.preventDefault(); onOpen(cur); }
     };
     addEventListener("keydown", k); return () => removeEventListener("keydown", k);
-  }, [fly, paused, onOpen, cur]);
+  }, [fly, paused, onOpen, cur, ask, askSeen, cancelAsk]);
 
-  // Trascinamento; un tocco senza movimento apre la scheda
+  // Trascinamento: destra = mi piace, sinistra = no, su = già visto. Un tocco senza movimento apre la scheda
   useEffect(() => {
-    const el = card.current; if (!el) return;
-    el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0");
+    const el = card.current; if (!el || ask) return;
+    el.style.transform = ""; ["--y", "--n", "--s"].forEach((v) => el.style.setProperty(v, "0"));
     let sx = 0, sy = 0, dx = 0, dy = 0, on = false;
-    const reset = () => { el.style.transform = ""; el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0"); };
+    const reset = () => { el.style.transform = ""; ["--y", "--n", "--s"].forEach((v) => el.style.setProperty(v, "0")); };
+    const up_ = () => -dy > Math.abs(dx) * 1.2; // movimento soprattutto verso l'alto
     const down = (e: PointerEvent) => { if (busy.current) return; on = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; el.setPointerCapture(e.pointerId); el.style.transition = "none"; };
     const move = (e: PointerEvent) => {
       if (!on) return; dx = e.clientX - sx; dy = e.clientY - sy;
-      el.style.transform = `translate(${dx}px,${dy * 0.3}px) rotate(${dx / 18}deg)`;
-      el.style.setProperty("--y", String(Math.max(0, Math.min(1, dx / 100))));
-      el.style.setProperty("--n", String(Math.max(0, Math.min(1, -dx / 100))));
+      if (up_()) {
+        el.style.transform = `translate(${dx * 0.3}px,${dy}px)`;
+        el.style.setProperty("--y", "0"); el.style.setProperty("--n", "0");
+        el.style.setProperty("--s", String(Math.max(0, Math.min(1, -dy / 100))));
+      } else {
+        el.style.transform = `translate(${dx}px,${dy * 0.3}px) rotate(${dx / 18}deg)`;
+        el.style.setProperty("--s", "0");
+        el.style.setProperty("--y", String(Math.max(0, Math.min(1, dx / 100))));
+        el.style.setProperty("--n", String(Math.max(0, Math.min(1, -dx / 100))));
+      }
     };
     const up = () => {
       if (!on) return; on = false; el.style.transition = "";
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) { reset(); onOpen(cur); return; }
+      if (up_() && dy < -100) { askSeen(); return; }
       if (dx > 100) fly(true); else if (dx < -100) fly(false); else reset();
     };
     el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move);
     el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
     return () => { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up); };
-  }, [cur, fly, onOpen]);
+  }, [cur, fly, onOpen, ask, askSeen]);
 
   return (
     <>
       <div className="stack">
         {next && <Card t={next} under key={"u" + next.key} />}
         <Card t={cur} ref={card} key={cur.key} />
+        {ask && (
+          <div className="seen-ask glass" role="dialog" aria-modal="false" aria-labelledby="seen-q">
+            <p id="seen-q"><b>L&apos;hai già visto.</b> Lo rivedresti?</p>
+            <div className="row">
+              <button className="btn no" onClick={() => choose(false)}>Non lo rivedrei</button>
+              <button className="btn yes" onClick={() => choose(true)} autoFocus>Lo rivedrei</button>
+            </div>
+            <button className="linkbtn" onClick={cancelAsk}>Annulla</button>
+          </div>
+        )}
       </div>
       <div className="actions">
         <button className="glass round sm" onClick={onUndo} disabled={!canUndo} aria-label="Annulla l'ultimo voto">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 010 12h-3" /></svg>
         </button>
-        <button className="glass round n" onClick={() => fly(false)} aria-label="No">
+        <button className="glass round n" onClick={() => fly(false)} aria-label="No" disabled={ask}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
-        <button className="glass round y" onClick={() => fly(true)} aria-label="Mi piace">
+        <button className="glass round y" onClick={() => fly(true)} aria-label="Mi piace" disabled={ask}>
           <svg viewBox="0 0 24 24" fill="currentColor"><path d={HEART} /></svg>
         </button>
-        <span className="round sm spacer" aria-hidden />
+        <button className="glass round sm s" onClick={askSeen} aria-label="L'ho già visto" title="Già visto" disabled={ask}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+        </button>
       </div>
-      <p className="hint">Scorri a destra se ti piace, a sinistra se no. Tocca la carta per leggere la trama.</p>
+      <p className="hint">Destra se ti piace, sinistra se no, in alto se l&apos;hai già visto. Tocca la carta per leggere la trama.</p>
     </>
   );
 }
 
 function Card({ t, under, ref }: { t: Title; under?: boolean; ref?: React.Ref<HTMLElement> }) {
+  const [seenHere, setSeenHere] = useState(false);
+  useEffect(() => { setSeenHere(seenMem.has(t.key)); }, [t.key]);
   return (
     <article ref={ref} className={"card" + (under ? " under" : "")} aria-label={t.title}>
       {t.poster ? <img className="poster" src={t.poster} alt="" draggable={false} /> : <div className="poster noposter" />}
+      {seenHere && <span className="seen-before">Già visto da te</span>}
       <div className="card-info">
         <div className="meta"><span>{metaLine(t)}</span></div>
         <h2>{t.title}</h2>
@@ -791,7 +843,7 @@ function Card({ t, under, ref }: { t: Title; under?: boolean; ref?: React.Ref<HT
           <span className="more">Leggi tutto</span>
         </div>
       </div>
-      <span className="stamp y">MI PIACE</span><span className="stamp n">NO</span>
+      <span className="stamp y">MI PIACE</span><span className="stamp n">NO</span><span className="stamp s">GIÀ VISTO</span>
     </article>
   );
 }
@@ -939,8 +991,8 @@ function SheetFrame({ label, bg, onClose, children }: { label: string; bg?: stri
   );
 }
 
-function Sheet({ t, onClose, onVote, watched, onWatched }: {
-  t: Title; onClose: () => void; onVote?: (yes: boolean) => void; watched?: boolean; onWatched?: (w: boolean) => void;
+function Sheet({ t, onClose, onVote, watched, onWatched, note }: {
+  t: Title; onClose: () => void; onVote?: (yes: boolean) => void; watched?: boolean; onWatched?: (w: boolean) => void; note?: string;
 }) {
   return (
     <SheetFrame label={t.title} bg={small(t.poster, "w342")} onClose={onClose}>
@@ -950,6 +1002,7 @@ function Sheet({ t, onClose, onVote, watched, onWatched }: {
           <h2>{t.title}</h2>
           <p className="muted">{metaLine(t)}</p>
           {t.genres.length > 0 && <p className="genre">{t.genres.join(" · ")}</p>}
+          {note && <p className="seen-note">{note}</p>}
         </div>
       </div>
       <p className="full">{t.overview || "Nessuna trama disponibile in italiano."}</p>
@@ -974,7 +1027,9 @@ function Sheet({ t, onClose, onVote, watched, onWatched }: {
   );
 }
 
-function Grid({ items, onOpen, watched }: { items: Title[]; onOpen: (t: Title) => void; watched?: boolean }) {
+function Grid({ items, onOpen, watched, note }: {
+  items: Title[]; onOpen: (t: Title) => void; watched?: boolean; note?: (key: string) => string | undefined;
+}) {
   return (
     <ul className={"grid" + (watched ? " watched" : "")}>
       {items.map((t) => (
@@ -982,7 +1037,10 @@ function Grid({ items, onOpen, watched }: { items: Title[]; onOpen: (t: Title) =
           <button className="tile" onClick={() => onOpen(t)} aria-label={`${t.title}: apri la scheda`}>
             {t.poster ? <img src={small(t.poster, "w342")!} alt="" /> : <span className="noposter" />}
             {watched && <span className="seen-tag">Visto ✓</span>}
-            <span className="tile-cap glass"><b>{t.title}</b><span>{t.providers[0] ?? metaLine(t)}</span></span>
+            <span className="tile-cap glass">
+              <b>{t.title}</b><span>{t.providers[0] ?? metaLine(t)}</span>
+              {note?.(t.key) && <span className="seen-note">{note(t.key)}</span>}
+            </span>
           </button>
         </li>
       ))}
