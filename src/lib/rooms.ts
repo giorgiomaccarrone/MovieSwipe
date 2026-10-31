@@ -5,7 +5,8 @@ import { getDeck } from "./tmdb";
 import type { Title, TypeFilter } from "./types";
 
 /*
- * Una stanza resta attiva 30 giorni dall'ultimo ingresso (ogni rientro rinnova la scadenza).
+ * Scadenza: una stanza con almeno un match non scade mai. Una stanza senza match (di prova o
+ * abbandonata) sparisce dopo 30 giorni dall'ultimo ingresso, così il database gratuito non si riempie.
  * Usa poche chiavi fisse:
  *   r:CODE:meta     JSON con nome, piattaforme, tipo, generi, giro
  *   r:CODE:deck     JSON con il mazzo (stesso ordine per tutti; i nuovi giri si aggiungono in fondo)
@@ -77,15 +78,16 @@ export async function createRoom(name: string, providers: number[], filter: Type
   return { code, member: id, name: n, meta, deck: items, voted: [] as string[], liked: [] as string[] };
 }
 
-/** Rinnova la scadenza: la stanza resta attiva finché qualcuno ci rientra almeno una volta al mese */
+/** Aggiorna la scadenza: con almeno un match la stanza diventa permanente, altrimenti rinnova i 30 giorni */
 async function touch(code: string) {
   await kv.hsetnx(k(code, "watched"), "_", "0"); // le stanze create prima di questa versione non avevano la chiave
-  await Promise.all(PARTS.map((p) => kv.expire(k(code, p), TTL)));
+  const hasMatches = (await kv.zall(k(code, "matches"))).some((m) => m.member !== "_");
+  await Promise.all(PARTS.map((p) => (hasMatches ? kv.persist(k(code, p)) : kv.expire(k(code, p), TTL))));
 }
 
 async function loadRoom(code: string) {
   const [meta, deck] = await Promise.all([kv.get(k(code, "meta")), kv.get(k(code, "deck"))]);
-  if (!meta || !deck) throw new RoomError("Questa stanza non esiste o è scaduta (le stanze restano attive 30 giorni dall'ultimo utilizzo).", 404);
+  if (!meta || !deck) throw new RoomError("Questa stanza non esiste più. Le stanze senza nessun match spariscono dopo 30 giorni senza utilizzo; quelle con almeno un match restano per sempre.", 404);
   return { meta: JSON.parse(meta) as RoomMeta, deck: JSON.parse(deck) as Title[] };
 }
 
@@ -197,6 +199,7 @@ export async function vote(code: string, member: string, key: string, like: bool
     if (n >= 2 && c >= n) { await kv.zaddNX(k(code, "matches"), Date.now(), key); match = true; }
   }
   await kv.incr(k(code, "v"));
+  if (match) await touch(code); // primo match: da qui la stanza non scade più
   return { match };
 }
 
@@ -239,6 +242,7 @@ export async function newRound(code: string, member: string, providers: number[]
   await kv.set(k(code, "deck"), JSON.stringify(nextDeck), TTL);
   await kv.set(k(code, "meta"), JSON.stringify(nextMeta), TTL);
   await kv.incr(k(code, "v"));
+  await touch(code); // set() rimette la scadenza: se la stanza ha match torna permanente
   return { added: added.length, meta: nextMeta, deck: nextDeck };
 }
 
@@ -262,4 +266,5 @@ export async function leave(code: string, member: string) {
       .map(([key]) => kv.zaddNX(k(code, "matches"), now, key)));
   }
   await kv.incr(k(code, "v"));
+  await touch(code);
 }

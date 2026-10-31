@@ -12,6 +12,7 @@ export interface KV {
   set(k: string, v: string, ttl: number): Promise<void>;
   incr(k: string): Promise<number>;
   expire(k: string, ttl: number): Promise<void>;
+  persist(k: string): Promise<void>;
   hset(k: string, obj: Record<string, string | number>): Promise<void>;
   hsetnx(k: string, f: string, v: string): Promise<boolean>;
   hget(k: string, f: string): Promise<string | null>;
@@ -46,6 +47,7 @@ function upstash(): KV {
     set: async (k, v, ttl) => { await r.set(k, v, { ex: ttl }); },
     incr: (k) => r.incr(k),
     expire: async (k, ttl) => { await r.expire(k, ttl); },
+    persist: async (k) => { await r.persist(k); },
     hset: async (k, obj) => { await r.hset(k, obj); },
     hsetnx: async (k, f, v) => (await r.hsetnx(k, f, v)) === 1,
     hget: async (k, f) => { const v = await r.hget<string>(k, f); return v == null ? null : String(v); },
@@ -74,6 +76,7 @@ function memory(): KV {
     set: async (k, v) => { m.set(k, v); },
     incr: async (k) => { const n = Number(m.get(k) ?? 0) + 1; m.set(k, String(n)); return n; },
     expire: async () => {},
+    persist: async () => {},
     hset: async (k, obj) => { const h = hash(k); for (const [f, v] of Object.entries(obj)) h.set(f, String(v)); },
     hsetnx: async (k, f, v) => { const h = hash(k); if (h.has(f)) return false; h.set(f, v); return true; },
     hget: async (k, f) => hash(k).get(f) ?? null,

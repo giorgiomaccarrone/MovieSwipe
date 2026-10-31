@@ -22,12 +22,11 @@ const mem = {
   get<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback; } catch { return fallback; } },
   set(key: string, v: unknown) { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* non disponibile */ } },
 };
-const ROOM_DAYS = 30 * 24 * 60 * 60 * 1000; // come la scadenza delle stanze sul server
 const rememberRoom = (code: string, member: string) => { const r = mem.get<RoomsMem>("pm-rooms", {}); r[code] = { member, at: Date.now() }; mem.set("pm-rooms", r); };
 const forgetRoom = (code: string) => { const r = mem.get<RoomsMem>("pm-rooms", {}); delete r[code]; mem.set("pm-rooms", r); };
+// Le stanze scadute vengono tolte da sole quando il riepilogo risponde che non esistono più
 const knownRooms = (): string[] =>
-  Object.entries(mem.get<RoomsMem>("pm-rooms", {}))
-    .filter(([, x]) => Date.now() - x.at < ROOM_DAYS).sort((a, b) => b[1].at - a[1].at).map(([c]) => c);
+  Object.entries(mem.get<RoomsMem>("pm-rooms", {})).sort((a, b) => b[1].at - a[1].at).map(([c]) => c);
 
 async function api<T>(url: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const r = await fetch(url, {
@@ -754,7 +753,7 @@ function Invite({ code, roomName, onClose, onLeave }: { code: string; roomName?:
       <div className="invite">
         <span className="lbl">Codice della stanza</span>
         <div className="code-big" aria-label={code.split("").join(" ")}>{code.split("").map((c, i) => <span key={i}>{c}</span>)}</div>
-        <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata. La stanza resta attiva finché la usate (scade dopo 30 giorni senza nessun accesso).</p>
+        <p className="muted">Gli altri aprono il link oppure scrivono il codice in “Ho un codice”. Si può entrare anche a partita iniziata. Dal primo match la stanza resta salvata per sempre: segnatevi il codice per rientrare da qualsiasi telefono.</p>
         <button className="btn primary" onClick={share}>Condividi l&apos;invito</button>
         {msg && <p className="small center">{msg}</p>}
         <input type="text" readOnly value={link} aria-label="Link della stanza" onFocus={(e) => e.currentTarget.select()} className="link-field" />
