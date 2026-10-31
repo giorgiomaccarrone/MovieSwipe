@@ -54,9 +54,7 @@ a { color: inherit; }
 /* ---------- Home ---------- */
 .hero { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 18px 8px 4px; }
 .hero.left { justify-items: start; text-align: left; padding: 8px 0 0; }
-.logo { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; color: #1a1400;
-  background: linear-gradient(145deg, #ffe066, #ff9f0a); box-shadow: 0 10px 30px -8px rgba(255, 159, 10, .6), 0 1px 0 rgba(255,255,255,.6) inset; }
-.logo svg { width: 32px; height: 32px; }
+.logo { width: 72px; height: 72px; border-radius: 18px; box-shadow: 0 12px 34px -8px rgba(255, 159, 10, .45), 0 0 0 1px rgba(255,255,255,.08); }
 .lead { color: var(--muted); font-size: 17px; max-width: 34ch; }
 .lead b { color: var(--ink); }
 .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }

@@ -1,6 +1,6 @@
 {
-  "name": "MovieSwipe",
-  "short_name": "MovieSwipe",
+  "name": "Filmetto",
+  "short_name": "Filmetto",
   "description": "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   "start_url": "/",
   "display": "standalone",
@@ -8,6 +8,23 @@
   "theme_color": "#0a0a0f",
   "lang": "it",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }

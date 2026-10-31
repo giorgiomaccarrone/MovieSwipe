@@ -1,4 +1,4 @@
-# MovieSwipe
+# Filmetto
 
 Tinder per film e serie, senza login. Si crea una stanza, si condivide il codice di 4 lettere e tutti fanno swipe insieme: quando un titolo piace a tutti i presenti, il match compare subito sui telefoni di tutti.
 
