@@ -1,6 +1,7 @@
 import "server-only";
 import type { MediaType, Provider, Title, TypeFilter } from "./types";
 import { demoDeck, demoDetails, demoProviders } from "./demo";
+import { tmdbGenres } from "./genres";
 
 const API = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/";
@@ -75,20 +76,24 @@ type Discover = {
 const PAGES = 2; // 20 titoli a pagina, per piattaforma e per tipo
 const MAX_DECK = 80;
 
-export async function getDeck(providerIds: number[], filter: TypeFilter): Promise<Title[]> {
-  if (isDemo) return demoDeck(providerIds, filter);
+export async function getDeck(providerIds: number[], filter: TypeFilter, genreIds: string[] = []): Promise<Title[]> {
+  if (isDemo) return demoDeck(providerIds, filter, genreIds);
   const [genres, providers] = await Promise.all([genreMap(), getProviders()]);
   const provName = new Map(providers.map((p) => [p.id, p.name]));
-  const types: MediaType[] = filter === "all" ? ["movie", "tv"] : [filter];
+  // Salto i tipi per cui nessuno dei generi scelti esiste (es. "Horror" tra le serie)
+  const types = (filter === "all" ? ["movie", "tv"] as MediaType[] : [filter])
+    .map((type) => ({ type, g: tmdbGenres(genreIds, type) }))
+    .filter((x) => x.g === null || x.g.length > 0);
 
   // Una ricerca per piattaforma: così sappiamo su quale servizio si trova ogni titolo
   const jobs = providerIds.flatMap((pid) =>
-    types.flatMap((type) =>
+    types.flatMap(({ type, g }) =>
       Array.from({ length: PAGES }, (_, i) =>
         tmdb<Discover>(`/discover/${type}`, {
           language: LANG, watch_region: REGION, with_watch_providers: pid,
           with_watch_monetization_types: "flatrate", sort_by: "popularity.desc",
           "vote_count.gte": 50, include_adult: "false", page: i + 1,
+          ...(g ? { with_genres: g.join("|") } : {}), // "|" = basta uno dei generi
         }).then((d) => ({ pid, type, d }), () => null),
       ),
     ),

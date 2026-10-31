@@ -27,7 +27,7 @@ export const isTitleKey = (s: string) => /^[mt][0-9a-z]{1,10}$/.test(s);
 export const cleanName = (s: string) =>
   (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9 ]/g, "").trim().replace(/\s+/g, " ").slice(0, 16);
 
-export interface RoomMeta { providers: number[]; filter: TypeFilter; createdAt: number }
+export interface RoomMeta { providers: number[]; filter: TypeFilter; genres?: string[]; createdAt: number }
 export interface Member { id: string; name: string; seen: number }
 export interface RoomState {
   v: number;
@@ -37,14 +37,14 @@ export interface RoomState {
 }
 export class RoomError extends Error { constructor(msg: string, public status = 400) { super(msg); } }
 
-export async function createRoom(name: string, providers: number[], filter: TypeFilter) {
+export async function createRoom(name: string, providers: number[], filter: TypeFilter, genres: string[] = []) {
   const n = cleanName(name);
   if (!n) throw new RoomError("Scrivi il tuo nome.");
-  const items = await getDeck(providers, filter);
-  if (!items.length) throw new RoomError("Nessun titolo trovato con questi filtri: prova ad aggiungere piattaforme.");
+  const items = await getDeck(providers, filter, genres);
+  if (!items.length) throw new RoomError("Nessun titolo trovato con questi filtri: prova ad aggiungere piattaforme o generi.");
   for (let i = items.length - 1; i > 0; i--) { const j = randomInt(i + 1); [items[i], items[j]] = [items[j], items[i]]; }
 
-  const meta: RoomMeta = { providers, filter, createdAt: Date.now() };
+  const meta: RoomMeta = { providers, filter, genres, createdAt: Date.now() };
   let code = "";
   for (let tries = 0; tries < 20 && !code; tries++) {
     const c = Array.from({ length: 4 }, () => ALPHABET[randomInt(ALPHABET.length)]).join("");

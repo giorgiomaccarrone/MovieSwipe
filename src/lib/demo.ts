@@ -1,5 +1,6 @@
 // Catalogo di esempio usato quando manca TMDB_API_KEY (sviluppo locale e test).
 import type { Provider, Title, TypeFilter, MediaType } from "./types";
+import { genreById } from "./genres";
 
 export const demoProviders: Provider[] = [
   { id: 8, name: "Netflix", logo: null },
@@ -59,8 +60,10 @@ const ALL: Title[] = ROWS.map(([title, type, year, pid, genres, overview], i) =>
 }));
 const PID = new Map(ROWS.map((r, i) => [ALL[i].key, r[3]]));
 
-export function demoDeck(providerIds: number[], filter: TypeFilter): Title[] {
-  return ALL.filter((t) => providerIds.includes(PID.get(t.key)!) && (filter === "all" || t.type === filter));
+export function demoDeck(providerIds: number[], filter: TypeFilter, genreIds: string[] = []): Title[] {
+  const rx = genreIds.map((id) => genreById.get(id)?.demo).filter((r): r is RegExp => !!r);
+  return ALL.filter((t) => providerIds.includes(PID.get(t.key)!) && (filter === "all" || t.type === filter)
+    && (!rx.length || rx.some((r) => r.test(t.genres.join(" ")))));
 }
 export function demoDetails(keys: string[]): Title[] {
   return ALL.filter((t) => keys.includes(t.key));

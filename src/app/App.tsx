@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Provider, Title, TypeFilter } from "@/lib/types";
+import { GENRES, genreById } from "@/lib/genres";
 
 /* ---------- Tipi delle risposte API ---------- */
 interface Session {
@@ -120,16 +121,17 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
   const [name, setName] = useState("");
   const [sel, setSel] = useState<number[]>([]);
   const [filter, setFilter] = useState<TypeFilter>("all");
+  const [genres, setGenres] = useState<string[]>([]);
   const [code, setCode] = useState(initialCode ?? "");
-  const [info, setInfo] = useState<{ members: string[]; meta: { providers: number[]; filter: TypeFilter } } | null>(null);
+  const [info, setInfo] = useState<{ members: string[]; meta: { providers: number[]; filter: TypeFilter; genres?: string[] } } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resume, setResume] = useState<string | null>(null);
 
   useEffect(() => {
     setName(mem.get("pm-name", ""));
-    const prefs = mem.get<{ providers: number[]; filter: TypeFilter } | null>("pm-prefs", null);
-    if (prefs) { setSel(prefs.providers); setFilter(prefs.filter); }
+    const prefs = mem.get<{ providers: number[]; filter: TypeFilter; genres?: string[] } | null>("pm-prefs", null);
+    if (prefs) { setSel(prefs.providers); setFilter(prefs.filter); setGenres(prefs.genres ?? []); }
     const last = lastRoom(); if (last && last !== initialCode) setResume(last);
   }, [initialCode]);
   useEffect(() => { if (!sel.length && providers.length && !mem.get("pm-prefs", null)) setSel(providers.slice(0, 4).map((p) => p.id)); }, [providers, sel.length]);
@@ -140,7 +142,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     setInfo(null);
     if (cleanCode.length !== 4) return;
     let alive = true;
-    api<{ members: string[]; meta: { providers: number[]; filter: TypeFilter } }>(`/api/rooms/${cleanCode}`)
+    api<{ members: string[]; meta: { providers: number[]; filter: TypeFilter; genres?: string[] } }>(`/api/rooms/${cleanCode}`)
       .then((d) => alive && (setInfo(d), setError("")))
       .catch((e) => alive && setError(e.message));
     return () => { alive = false; };
@@ -148,14 +150,18 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
 
   const provName = (id: number) => providers.find((p) => p.id === id)?.name;
   const toggle = (id: number) => setSel(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
+  // Alcuni generi esistono solo per i film (es. Horror, Romantico): li nascondo se si guardano solo serie
+  const shownGenres = GENRES.filter((g) => filter !== "tv" || g.tv.length > 0);
+  const activeGenres = genres.filter((id) => shownGenres.some((g) => g.id === id));
+  const toggleGenre = (id: string) => setGenres(activeGenres.includes(id) ? activeGenres.filter((x) => x !== id) : [...activeGenres, id]);
 
   async function submit() {
     if (!name.trim()) return setError("Scrivi il tuo nome, così gli altri sanno chi sei.");
     setBusy(true); setError("");
     try {
       if (mode === "create") {
-        mem.set("pm-prefs", { providers: sel, filter });
-        onEnter(await api<Session>("/api/rooms", { method: "POST", body: { name, providers: sel, filter } }));
+        mem.set("pm-prefs", { providers: sel, filter, genres: activeGenres });
+        onEnter(await api<Session>("/api/rooms", { method: "POST", body: { name, providers: sel, filter, genres: activeGenres } }));
       } else {
         if (cleanCode.length !== 4) throw new Error("Il codice della stanza ha 4 caratteri.");
         onEnter(await api<Session>(`/api/rooms/${cleanCode}/join`, { method: "POST", body: { name } }));
@@ -176,7 +182,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
       <header className="hero">
         <img className="logo" src="/icon.svg" alt="" width={72} height={72} />
         <h1>Filmetto</h1>
-        <p className="lead">Create una stanza, fate swipe insieme su film e serie. Quando piace a tutti, è un match.</p>
+        <p className="lead">Create una stanza e fate swipe insieme su film e serie. Quando una cosa piace a tutti, è match.</p>
         {flags.demo && <p className="pill warn">Modalità demo: manca la chiave TMDB</p>}
         {!flags.database && <p className="pill warn">Database non collegato: le stanze funzionano solo su questo server</p>}
       </header>
@@ -219,6 +225,19 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
               ))}
             </div>
           </div>
+          <div className="field">
+            <div className="lbl-row">
+              <span className="lbl">Generi</span>
+              {activeGenres.length > 0
+                ? <button type="button" className="mini-link" onClick={() => setGenres([])}>Tutti i generi</button>
+                : <span className="hint-inline">Nessuno scelto = tutti</span>}
+            </div>
+            <div className="chips">
+              {shownGenres.map((g) => (
+                <button key={g.id} type="button" className="chip nologo small-chip" aria-pressed={activeGenres.includes(g.id)} onClick={() => toggleGenre(g.id)}>{g.label}</button>
+              ))}
+            </div>
+          </div>
         </>) : (
           <div className="field">
             <label className="lbl" htmlFor="code">Codice della stanza</label>
@@ -228,6 +247,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
               <p className="muted small">
                 Dentro: <b className="ink">{info.members.join(", ") || "nessuno"}</b> · {TYPE_LABEL[info.meta.filter]} su{" "}
                 {info.meta.providers.map(provName).filter(Boolean).join(", ") || "piattaforme scelte"}
+                {info.meta.genres?.length ? <> · {info.meta.genres.map((id) => genreById.get(id)?.label).filter(Boolean).join(", ")}</> : null}
               </p>
             )}
           </div>
