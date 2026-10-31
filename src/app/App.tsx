@@ -125,8 +125,10 @@ function useStatusBarColor(src: string | null) {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return;
-    // Solo il meta theme-color: NON cambiare lo sfondo della pagina, altrimenti copre le sfocature colorate
-    const setColor = (c: string) => { meta.setAttribute("content", c); };
+    // iOS 26 colora la barra di stato con il colore di fondo della pagina (non più con theme-color).
+    // Lo imposto sul <body>: il suo fondo finisce sotto lo strato con le sfocature, quindi non le copre
+    // (impostarlo su <html> invece porta il fondo del body sopra le sfocature: era il bug dello sfondo nero piatto).
+    const setColor = (c: string) => { meta.setAttribute("content", c); document.body.style.backgroundColor = c; };
     const file = src?.match(/\/w\d+(\/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp))$/)?.[1];
     if (!file) { setColor(BASE_THEME); return; }
     let alive = true;
