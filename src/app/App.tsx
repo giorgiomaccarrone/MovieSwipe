@@ -352,6 +352,7 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
   const [invite, setInvite] = useState(false);
   const [round, setRound] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [popups, setPopups] = useState<string[]>([]);
   const [toast, setToast] = useState("");
   const [gone, setGone] = useState("");
@@ -458,6 +459,13 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
       .catch((e) => { setWatchedLocal((w) => { const n = { ...w }; delete n[t.key]; return n; }); setToast((e as Error).message); });
   }
 
+  async function deleteRoom() {
+    try {
+      await api(`/api/rooms/${code}/delete`, { method: "POST", body: { member } });
+      forgetRoom(code); onExit();
+    } catch (e) { setConfirmDelete(false); setToast((e as Error).message); }
+  }
+
   async function leaveRoom() {
     try { await api(`/api/rooms/${code}/leave`, { method: "POST", body: { member } }); } catch { /* esco comunque */ }
     forgetRoom(code); onExit();
@@ -529,7 +537,7 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
 
         {tab === "swipe" ? (
           cur ? (
-            <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || confirmLeave || popups.length > 0}
+            <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || confirmLeave || confirmDelete || popups.length > 0}
               canUndo={history_.length > 0} onVote={vote} onUndo={undo}
               onOpen={(t) => setDetail({ t, canVote: true })} />
           ) : (
@@ -569,7 +577,14 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
           watched={detail.canVote ? undefined : isWatched(detail.t.key)}
           onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }} />
       )}
-      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)} onLeave={() => { setInvite(false); setConfirmLeave(true); }} />}
+      {invite && <Invite code={code} roomName={meta.name} onClose={() => setInvite(false)}
+        onLeave={() => { setInvite(false); setConfirmLeave(true); }}
+        onDelete={() => { setInvite(false); setConfirmDelete(true); }} />}
+      {confirmDelete && (
+        <Confirm title="Eliminare la stanza per sempre?"
+          text={`La stanza${meta.name ? ` “${meta.name}”` : ""} sparirà per tutti i partecipanti, insieme a voti, match e titoli già visti. Non si può annullare.`}
+          keep="Annulla" go="Elimina per sempre" onCancel={() => setConfirmDelete(false)} onConfirm={deleteRoom} />
+      )}
       {round && (
         <NewRound code={code} member={member} meta={meta} providers={providers} onClose={() => setRound(false)}
           onDone={(r) => { setDeck(r.deck); setMeta(r.meta); setRound(false); setTab("swipe"); setToast(`Aggiunti ${r.added} titoli nuovi`); poll(); }} />
@@ -750,7 +765,9 @@ function MatchPopup({ t, names, onClose, onList }: { t: Title; names: string[]; 
 }
 
 /* ================= Invito ================= */
-function Invite({ code, roomName, onClose, onLeave }: { code: string; roomName?: string; onClose: () => void; onLeave: () => void }) {
+function Invite({ code, roomName, onClose, onLeave, onDelete }: {
+  code: string; roomName?: string; onClose: () => void; onLeave: () => void; onDelete: () => void;
+}) {
   const [msg, setMsg] = useState("");
   const link = typeof location !== "undefined" ? `${location.origin}/r/${code}` : "";
   const text = `Scegliamo cosa guardare su Filmetto! Entra nella stanza ${roomName ? `“${roomName}” (${code})` : code}: ${link}`;
@@ -767,7 +784,10 @@ function Invite({ code, roomName, onClose, onLeave }: { code: string; roomName?:
         <button className="btn primary" onClick={share}>Condividi l&apos;invito</button>
         {msg && <p className="small center">{msg}</p>}
         <input type="text" readOnly value={link} aria-label="Link della stanza" onFocus={(e) => e.currentTarget.select()} className="link-field" />
-        <button className="btn danger" onClick={onLeave}>Esci dalla stanza</button>
+        <div className="danger-zone">
+          <button className="btn danger" onClick={onLeave}>Esci dalla stanza</button>
+          <button className="btn danger" onClick={onDelete}>Elimina la stanza per tutti</button>
+        </div>
       </div>
     </SheetFrame>
   );

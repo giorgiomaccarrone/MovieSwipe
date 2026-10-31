@@ -62,6 +62,7 @@ export async function createRoom(name: string, providers: number[], filter: Type
     if (await kv.setNX(k(c, "meta"), JSON.stringify(meta), TTL)) code = c;
   }
   if (!code) throw new RoomError("Non riesco a creare la stanza, riprova.", 503);
+  await kv.del(k(code, "deleted")); // il codice di una stanza eliminata può essere riusato
 
   const id = randomUUID();
   await Promise.all([
@@ -85,8 +86,18 @@ async function touch(code: string) {
   await Promise.all(PARTS.map((p) => (hasMatches ? kv.persist(k(code, p)) : kv.expire(k(code, p), TTL))));
 }
 
+async function deletedBy(code: string) {
+  const who = await kv.get(k(code, "deleted"));
+  return who == null ? null : who || "un partecipante";
+}
+const deletedMsg = (who: string) => `Questa stanza è stata eliminata da ${who}.`;
+
 async function loadRoom(code: string) {
   const [meta, deck] = await Promise.all([kv.get(k(code, "meta")), kv.get(k(code, "deck"))]);
+  if (!meta || !deck) {
+    const who = await deletedBy(code);
+    if (who) throw new RoomError(deletedMsg(who), 404);
+  }
   if (!meta || !deck) throw new RoomError("Questa stanza non esiste più. Le stanze senza nessun match spariscono dopo 30 giorni senza utilizzo; quelle con almeno un match restano per sempre.", 404);
   return { meta: JSON.parse(meta) as RoomMeta, deck: JSON.parse(deck) as Title[] };
 }
@@ -148,7 +159,10 @@ export async function claimMember(code: string, name: string) {
 
 export async function roomState(code: string, since?: number): Promise<RoomState | { v: number; same: true }> {
   const v = await kv.get(k(code, "v"));
-  if (v == null) throw new RoomError("Questa stanza non esiste o è scaduta.", 404);
+  if (v == null) {
+    const who = await deletedBy(code);
+    throw new RoomError(who ? deletedMsg(who) : "Questa stanza non esiste più.", 404);
+  }
   if (since && Number(v) === since) return { v: since, same: true };
   const [members, seen, counts, matches, watched, rawMeta] = await Promise.all([
     kv.hgetall(k(code, "members")), kv.hgetall(k(code, "seen")),
@@ -267,4 +281,13 @@ export async function leave(code: string, member: string) {
   }
   await kv.incr(k(code, "v"));
   await touch(code);
+}
+
+/** Elimina la stanza per tutti. Resta solo un segnaposto per 30 giorni, così gli altri
+ *  partecipanti vedono chi l'ha eliminata invece di un generico "non esiste". */
+export async function deleteRoom(code: string, member: string) {
+  const name = await kv.hget(k(code, "members"), member);
+  if (!name) throw new RoomError("Non sei in questa stanza.", 403);
+  await kv.del(...PARTS.map((p) => k(code, p)));
+  await kv.set(k(code, "deleted"), name, TTL);
 }
