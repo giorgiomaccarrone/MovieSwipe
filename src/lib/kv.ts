@@ -28,8 +28,17 @@ export const hasDatabase = !!(URL_ && TOKEN);
 
 function upstash(): KV {
   const r = new Redis({ url: URL_!, token: TOKEN!, automaticDeserialization: false });
-  const str = (o: Record<string, unknown> | null) =>
-    Object.fromEntries(Object.entries(o ?? {}).map(([k, v]) => [k, String(v)]));
+  // Senza deserializzazione automatica Upstash restituisce HGETALL come lista piatta
+  // [campo, valore, campo, valore…]; altre versioni come oggetto. Gestisco entrambi.
+  const str = (o: unknown): Record<string, string> => {
+    if (!o) return {};
+    if (Array.isArray(o)) {
+      const out: Record<string, string> = {};
+      for (let i = 0; i + 1 < o.length; i += 2) out[String(o[i])] = String(o[i + 1]);
+      return out;
+    }
+    return Object.fromEntries(Object.entries(o as Record<string, unknown>).map(([k, v]) => [k, String(v)]));
+  };
   return {
     get: async (k) => { const v = await r.get<string>(k); return v == null ? null : String(v); },
     setNX: async (k, v, ttl) => (await r.set(k, v, { nx: true, ex: ttl })) === "OK",
@@ -39,7 +48,7 @@ function upstash(): KV {
     hsetnx: async (k, f, v) => (await r.hsetnx(k, f, v)) === 1,
     hget: async (k, f) => { const v = await r.hget<string>(k, f); return v == null ? null : String(v); },
     hdel: async (k, f) => { await r.hdel(k, f); },
-    hgetall: async (k) => str(await r.hgetall<Record<string, unknown>>(k)),
+    hgetall: async (k) => str(await r.hgetall(k)),
     hlen: (k) => r.hlen(k),
     hincrby: (k, f, n) => r.hincrby(k, f, n),
     zaddNX: async (k, score, member) => { await r.zadd(k, { nx: true }, { score, member }); },
