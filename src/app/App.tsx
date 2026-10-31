@@ -647,7 +647,7 @@ function Room({ session, providers, onExit, onSwitch }: {
 
       {detail && (
         <Sheet t={detail.t} onClose={() => setDetail(null)}
-          onVote={detail.canVote ? (yes) => { const t = detail.t; setDetail(null); vote(t, yes); } : undefined}
+          onVote={detail.canVote ? (yes, seen) => { const t = detail.t; setDetail(null); vote(t, yes, seen); } : undefined}
           watched={detail.canVote ? undefined : isWatched(detail.t.key)}
           onWatched={detail.canVote ? undefined : (w) => { const t = detail.t; setDetail(null); markWatched(t, w); }}
           note={detail.canVote ? undefined : seenNote(detail.t.key)} />
@@ -992,8 +992,9 @@ function SheetFrame({ label, bg, onClose, children }: { label: string; bg?: stri
 }
 
 function Sheet({ t, onClose, onVote, watched, onWatched, note }: {
-  t: Title; onClose: () => void; onVote?: (yes: boolean) => void; watched?: boolean; onWatched?: (w: boolean) => void; note?: string;
+  t: Title; onClose: () => void; onVote?: (yes: boolean, seen?: boolean) => void; watched?: boolean; onWatched?: (w: boolean) => void; note?: string;
 }) {
+  const [askSeen, setAskSeen] = useState(false);
   return (
     <SheetFrame label={t.title} bg={small(t.poster, "w342")} onClose={onClose}>
       <div className="sheet-head">
@@ -1013,10 +1014,27 @@ function Sheet({ t, onClose, onVote, watched, onWatched, note }: {
         </div>
       )}
       {onVote ? (
-        <div className="row">
-          <button className="btn no" onClick={() => onVote(false)}>No</button>
-          <button className="btn yes" onClick={() => onVote(true)}>Mi piace</button>
-        </div>
+        askSeen ? (
+          <div className="seen-inline">
+            <p><b>L&apos;hai già visto.</b> Lo rivedresti?</p>
+            <div className="row">
+              <button className="btn no" onClick={() => onVote(false, true)}>Non lo rivedrei</button>
+              <button className="btn yes" onClick={() => onVote(true, true)} autoFocus>Lo rivedrei</button>
+            </div>
+            <button className="linkbtn" onClick={() => setAskSeen(false)}>Annulla</button>
+          </div>
+        ) : (
+          <div className="vote-btns">
+            <div className="row">
+              <button className="btn no" onClick={() => onVote(false)}>No</button>
+              <button className="btn yes" onClick={() => onVote(true)}>Mi piace</button>
+            </div>
+            <button className="btn seen-btn" onClick={() => setAskSeen(true)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+              L&apos;ho già visto
+            </button>
+          </div>
+        )
       ) : (<>
         {onWatched && (watched
           ? <button className="btn" onClick={() => onWatched(false)}>Rimetti tra quelli da vedere</button>
