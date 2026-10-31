@@ -492,10 +492,15 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
           </button>
           <div className="segmented two mini icons" role="tablist" aria-label="Vista">
             <button role="tab" aria-selected={tab === "swipe"} aria-checked={tab === "swipe"} onClick={() => setTab("swipe")} aria-label="Swipe" title="Swipe">
-              {/* due carte sovrapposte */}
+              {/* due carte sovrapposte: quella davanti, piena, copre quella dietro */}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden>
-                <rect x="3.5" y="5" width="11" height="15" rx="2.5" transform="rotate(-10 9 12.5)" />
-                <rect x="9" y="3.5" width="11" height="15" rx="2.5" fill="currentColor" fillOpacity=".18" transform="rotate(8 14.5 11)" />
+                {/* la carta dietro viene "tagliata" dove c'è quella davanti, così non si vede in trasparenza */}
+                <mask id="swipe-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24">
+                  <rect width="24" height="24" fill="#fff" />
+                  <rect x="9" y="3.5" width="11" height="15" rx="2.5" transform="rotate(8 14.5 11)" fill="#000" stroke="#000" strokeWidth="3.5" />
+                </mask>
+                <rect x="3.5" y="5" width="11" height="15" rx="2.5" transform="rotate(-10 9 12.5)" mask="url(#swipe-cut)" />
+                <rect x="9" y="3.5" width="11" height="15" rx="2.5" fill="currentColor" transform="rotate(8 14.5 11)" />
               </svg>
             </button>
             <button role="tab" aria-selected={tab === "list"} aria-checked={tab === "list"} onClick={() => setTab("list")}
@@ -526,7 +531,7 @@ function Room({ session, providers, onExit }: { session: Session; providers: Pro
           cur ? (
             <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || confirmLeave || popups.length > 0}
               canUndo={history_.length > 0} onVote={vote} onUndo={undo}
-              onOpen={(t) => setDetail({ t, canVote: true })} onList={() => setTab("list")} matchCount={toWatch.length} />
+              onOpen={(t) => setDetail({ t, canVote: true })} />
           ) : (
             <section className="glass panel center">
               <h3>Hai votato tutto</h3>
@@ -615,9 +620,9 @@ function NewRound({ code, member, meta, providers, onClose, onDone }: {
 }
 
 /* ================= Swipe ================= */
-function Swipe({ queue, paused, canUndo, onVote, onUndo, onOpen, onList, matchCount }: {
-  queue: Title[]; paused: boolean; canUndo: boolean; matchCount: number;
-  onVote: (t: Title, yes: boolean) => void; onUndo: () => void; onOpen: (t: Title) => void; onList: () => void;
+function Swipe({ queue, paused, canUndo, onVote, onUndo, onOpen }: {
+  queue: Title[]; paused: boolean; canUndo: boolean;
+  onVote: (t: Title, yes: boolean) => void; onUndo: () => void; onOpen: (t: Title) => void;
 }) {
   const card = useRef<HTMLElement>(null);
   const busy = useRef(false);
@@ -690,10 +695,7 @@ function Swipe({ queue, paused, canUndo, onVote, onUndo, onOpen, onList, matchCo
         <button className="glass round y" onClick={() => fly(true)} aria-label="Mi piace">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d={HEART} /></svg>
         </button>
-        <button className="glass round sm list-btn" onClick={onList} aria-label={`Vedi i match (${matchCount})`}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5" /><rect x="13" y="4" width="7" height="7" rx="1.5" /><rect x="4" y="13" width="7" height="7" rx="1.5" /><rect x="13" y="13" width="7" height="7" rx="1.5" /></svg>
-          {matchCount > 0 && <span className="badge">{matchCount}</span>}
-        </button>
+        <span className="round sm spacer" aria-hidden />
       </div>
       <p className="hint">Scorri a destra se ti piace, a sinistra se no. Tocca la carta per leggere la trama.</p>
     </>

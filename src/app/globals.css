@@ -252,3 +252,4 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .segmented.mini.icons button { position: relative; padding: 7px 0; }
 .segmented.mini.icons svg { width: 20px; height: 20px; }
 .segmented.mini.icons .badge { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; font-size: 11px; padding: 0 5px; }
+.round.spacer { visibility: hidden; border: 0; } /* tiene centrati i pulsanti No e Mi piace */
