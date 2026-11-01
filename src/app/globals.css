@@ -345,3 +345,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 
 .pill.install { color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 9px 16px; }
 .pill.install svg { width: 18px; height: 18px; }
+
+/* ---------- Filtro per genere nei match: riga che scorre in orizzontale ---------- */
+.genre-filter { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px; }
+.genre-filter::-webkit-scrollbar { display: none; }
+.genre-filter .chip { flex: none; }
+.genre-filter .chip[aria-checked=true] { background: #fff; color: #000; border-color: #fff; }
+.genre-filter .chip[aria-checked=false] { color: var(--muted); }
+.genre-filter .count { margin-left: 6px; font-size: 12px; opacity: .55; font-variant-numeric: tabular-nums; }

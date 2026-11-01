@@ -115,7 +115,7 @@ export async function getDeck(providerIds: number[], filter: TypeFilter, genreId
         overview: r.overview || "",
         poster: r.poster_path ? IMG + "w500" + r.poster_path : null,
         rating: r.vote_average ? Math.round(r.vote_average * 10) / 10 : null,
-        genres: r.genre_ids.map((g) => genres.get(g)).filter((g): g is string => !!g).slice(0, 2),
+        genres: r.genre_ids.map((g) => genres.get(g)).filter((g): g is string => !!g).slice(0, 3),
         providers: name ? [name] : [],
         pop: r.popularity,
       });
@@ -148,7 +148,7 @@ export async function getDetails(keys: string[]): Promise<Title[]> {
             overview: r.overview || "",
             poster: r.poster_path ? IMG + "w500" + r.poster_path : null,
             rating: r.vote_average ? Math.round(r.vote_average * 10) / 10 : null,
-            genres: r.genres.map((g) => g.name).slice(0, 2),
+            genres: r.genres.map((g) => g.name).slice(0, 3),
             providers: (r["watch/providers"]?.results?.[REGION]?.flatrate ?? []).map((p) => p.provider_name),
           };
         },

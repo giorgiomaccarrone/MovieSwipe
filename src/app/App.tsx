@@ -554,7 +554,15 @@ function Room({ session, providers, onExit, onSwitch }: {
   const [kind, setKind] = useState<TypeFilter>("all");
   const mixed = meta.filter === "all" || (matches.some((t) => t.type === "movie") && matches.some((t) => t.type === "tv"));
   const shownKind: TypeFilter = mixed ? kind : "all";
-  const ofKind = (t: Title) => shownKind === "all" || t.type === shownKind;
+  const isKind = (t: Title) => shownKind === "all" || t.type === shownKind;
+  // Filtro per genere: i generi che compaiono davvero tra i match (del tipo scelto), dal più frequente
+  const [genre, setGenre] = useState<string | null>(null);
+  const genreCounts = new Map<string, number>();
+  for (const t of toWatch.filter(isKind)) for (const g of t.genres) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
+  const genreList = [...genreCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "it"));
+  const shownGenre = genre && (genreCounts.has(genre) || matches.some((t) => isWatched(t.key) && isKind(t) && t.genres.includes(genre))) ? genre : null;
+  const isGenre = (t: Title) => !shownGenre || t.genres.includes(shownGenre);
+  const ofKind = (t: Title) => isKind(t) && isGenre(t);
   const toWatchShown = toWatch.filter(ofKind);
   const watchedList = matches.filter((t) => isWatched(t.key)).filter(ofKind);
   const kindLabel = shownKind === "movie" ? "film" : shownKind === "tv" ? "serie" : "match";
@@ -644,14 +652,27 @@ function Room({ session, providers, onExit, onSwitch }: {
                 {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
                   <button key={f} type="button" role="radio" aria-checked={shownKind === f} onClick={() => setKind(f)}>
                     {f === "all" ? "Tutti" : TYPE_LABEL[f]}
-                    <span className="count">{(f === "all" ? toWatch : toWatch.filter((t) => t.type === f)).length}</span>
+                    <span className="count">{toWatch.filter(isGenre).filter((t) => f === "all" || t.type === f).length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {genreList.length > 1 && (
+              <div className="genre-filter" role="radiogroup" aria-label="Genere">
+                <button type="button" role="radio" aria-checked={!shownGenre} className="chip nologo small-chip" onClick={() => setGenre(null)}>
+                  Tutti i generi
+                </button>
+                {genreList.map(([g, n]) => (
+                  <button key={g} type="button" role="radio" aria-checked={shownGenre === g} className="chip nologo small-chip"
+                    onClick={() => setGenre(shownGenre === g ? null : g)}>
+                    {g}<span className="count">{n}</span>
                   </button>
                 ))}
               </div>
             )}
             {toWatchShown.length ? <Grid items={toWatchShown} note={seenNote} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
               <p className="glass panel muted">{
-                toWatch.length ? `Nessun${shownKind === "tv" ? "a serie" : " film"} da vedere tra i match: prova “Tutti” o fate un nuovo giro.`
+                toWatch.length ? `Nessun titolo da vedere con questi filtri: prova “Tutti” o “Tutti i generi”.`
                 : matches.length ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
                 : "Ancora nessun match. Appena un titolo piace a tutti i presenti comparirà qui, e ve lo segnalo subito."}</p>
             )}
