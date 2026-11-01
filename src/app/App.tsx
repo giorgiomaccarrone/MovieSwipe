@@ -328,8 +328,7 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
       {rooms.length > 0 && (
         <section className="stack-s">
           <span className="lbl">Le tue stanze</span>
-          <RoomRows rooms={rooms} busy={busy} onOpen={rejoin}
-            onForget={(c) => { forgetRoom(c); setRooms((x) => x.filter((y) => y.code !== c)); }} />
+          <RoomRows rooms={rooms} busy={busy} onOpen={rejoin} />
         </section>
       )}
 
