@@ -544,6 +544,14 @@ function Room({ session, providers, onExit, onSwitch }: {
   const matches = [...(state?.matches ?? [])].sort((a, b) => b.at - a.at).map((m) => byKey.get(m.key)).filter((t): t is Title => !!t);
   const toWatch = matches.filter((t) => !isWatched(t.key));
   const nameOf = (id: string) => (id === member ? "te" : members.find((m) => m.id === id)?.name ?? "qualcuno");
+  // Versione corta per la chip sulla locandina: "Giorgio", "Tu e Anna", "Tutti"
+  const seenWho = (key: string) => {
+    const ids = state?.alreadyBy?.[key] ?? [];
+    if (!ids.length) return undefined;
+    if (ids.length >= members.length) return "Tutti";
+    const names = ids.map((id) => (id === member ? "Tu" : nameOf(id)));
+    return names.length > 2 ? `${names.length} persone` : names.join(" e ");
+  };
   const seenNote = (key: string) => {
     const ids = state?.alreadyBy?.[key] ?? [];
     if (!ids.length) return undefined;
@@ -670,7 +678,7 @@ function Room({ session, providers, onExit, onSwitch }: {
                 ))}
               </div>
             )}
-            {toWatchShown.length ? <Grid items={toWatchShown} note={seenNote} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
+            {toWatchShown.length ? <Grid items={toWatchShown} note={seenWho} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
               <p className="glass panel muted">{
                 toWatch.length ? `Nessun titolo da vedere con questi filtri: prova “Tutti” o “Tutti i generi”.`
                 : matches.length ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
@@ -678,7 +686,7 @@ function Room({ session, providers, onExit, onSwitch }: {
             )}
             {watchedList.length > 0 && (<>
               <h3 className="section-title">Già visti <span className="muted">{watchedList.length}</span></h3>
-              <Grid items={watchedList} watched note={seenNote} onOpen={(t) => setDetail({ t, canVote: false })} />
+              <Grid items={watchedList} watched note={seenWho} onOpen={(t) => setDetail({ t, canVote: false })} />
             </>)}
             <button className="glass panel round-cta" onClick={() => setRound(true)}>
               <span><b>Nuovo giro</b><span className="muted small">Altri titoli da votare, anche con generi o piattaforme diversi.</span></span>
@@ -1099,10 +1107,13 @@ function Grid({ items, onOpen, watched, note }: {
           <button className="tile" onClick={() => onOpen(t)} aria-label={`${t.title}: apri la scheda`}>
             {t.poster ? <img src={small(t.poster, "w342")!} alt="" /> : <span className="noposter" />}
             {watched && <span className="seen-tag">Visto ✓</span>}
-            <span className="tile-cap glass">
-              <b>{t.title}</b><span>{t.providers[0] ?? metaLine(t)}</span>
-              {note?.(t.key) && <span className="seen-note">{note(t.key)}</span>}
-            </span>
+            {note?.(t.key) && (
+              <span className="seen-chip" title={`Già visto da: ${note(t.key)}`}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                <span className="sr-only">Già visto da </span>{note(t.key)}
+              </span>
+            )}
+            <span className="tile-cap glass"><b>{t.title}</b><span>{t.providers[0] ?? metaLine(t)}</span></span>
           </button>
         </li>
       ))}

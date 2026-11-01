@@ -353,3 +353,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .genre-filter .chip[aria-checked=true] { background: #fff; color: #000; border-color: #fff; }
 .genre-filter .chip[aria-checked=false] { color: var(--muted); }
 .genre-filter .count { margin-left: 6px; font-size: 12px; opacity: .55; font-variant-numeric: tabular-nums; }
+
+/* Chip "già visto da" sulla locandina dei match */
+.seen-chip { position: absolute; top: 8px; left: 8px; max-width: calc(100% - 16px); display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; padding: 4px 9px 4px 7px; border-radius: 999px;
+  background: rgba(10, 20, 28, .62); color: #8fdfff; border: 1px solid rgba(100, 210, 255, .35);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seen-chip svg { width: 14px; height: 14px; flex: none; }
+.grid.watched .seen-chip { top: 38px; } /* sotto l'etichetta "Visto ✓" */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
