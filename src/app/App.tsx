@@ -313,14 +313,14 @@ function Home({ providers, flags, initialCode, bootError, onEnter }: {
     <>
       <header className="hero">
         <img className="logo" src="/icon.svg" alt="" width={72} height={72} />
-        <h1>Filmetto</h1>
+        <h1>Filmetti</h1>
         <p className="lead">Create una stanza e fate swipe insieme su film e serie. Quando una cosa piace a tutti, è match.</p>
         {flags.demo && <p className="pill warn">Modalità demo: manca la chiave TMDB</p>}
         {!flags.database && <p className="pill warn">Database non collegato: le stanze funzionano solo su questo server</p>}
         {canInstall && (
           <button className="glass pill install" onClick={install}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
-            Installa Filmetto sul telefono
+            Installa Filmetti sul telefono
           </button>
         )}
       </header>
@@ -926,9 +926,9 @@ function Invite({ code, member, roomName, onClose, onLeave, onDelete, onSwitch, 
     try { await onSwitch(c); } catch (e) { setSwitchErr((e as Error).message); setSwitching(false); }
   }
   const link = typeof location !== "undefined" ? `${location.origin}/r/${code}` : "";
-  const text = `Scegliamo cosa guardare su Filmetto! Entra nella stanza ${roomName ? `“${roomName}” (${code})` : code}: ${link}`;
+  const text = `Scegliamo cosa guardare su Filmetti! Entra nella stanza ${roomName ? `“${roomName}” (${code})` : code}: ${link}`;
   async function share() {
-    try { if (navigator.share) { await navigator.share({ title: "Filmetto", text }); return; } } catch { return; }
+    try { if (navigator.share) { await navigator.share({ title: "Filmetti", text }); return; } } catch { return; }
     try { await navigator.clipboard.writeText(text); setMsg("Invito copiato"); } catch { setMsg("Copia il link qui sotto"); }
   }
   return (

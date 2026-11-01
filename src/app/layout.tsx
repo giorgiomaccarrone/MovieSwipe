@@ -6,10 +6,10 @@ import "@fontsource/figtree/latin-700.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Filmetto",
+  title: "Filmetti",
   description: "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Filmetto", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "Filmetti", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = { themeColor: "#0a0a0f", width: "device-width", initialScale: 1, viewportFit: "cover" };

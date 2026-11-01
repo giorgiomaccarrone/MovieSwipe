@@ -1,6 +1,6 @@
 {
-  "name": "Filmetto",
-  "short_name": "Filmetto",
+  "name": "Filmetti",
+  "short_name": "Filmetti",
   "description": "Fate swipe su film e serie: quello che piace a tutti finisce nella lista da guardare.",
   "start_url": "/",
   "display": "standalone",

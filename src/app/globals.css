@@ -327,9 +327,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
    (circa fino a 110–120 punti dall'alto). Lì lasciamo solo lo sfondo colorato e
    spostiamo più in basso i controlli, così restano nitidi. In Safari e Chrome non cambia nulla. */
 @media (display-mode: standalone) {
-  .app { padding-top: calc(env(safe-area-inset-top) + 24px); }
+  .app { padding-top: calc(env(safe-area-inset-top) + 26px); }
   .app.room { padding-top: 0; }
-  .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 24px); }
+  .sticky-bar { padding-top: calc(env(safe-area-inset-top) + 26px); }
   /* Il vetro della barra è diviso in due strati (sotto l'ora e sotto i pulsanti):
      quando si scorre tutti e due si scuriscono e sfocano allo stesso modo */
   .sticky-bar::before { top: env(safe-area-inset-top); border-top: 0; }
