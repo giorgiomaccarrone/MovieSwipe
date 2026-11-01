@@ -650,6 +650,16 @@ function Room({ session, providers, onExit, onSwitch }: {
         ) : (
           <section className="stack-m">
             <div className="headline"><span className="big">{toWatchShown.length}</span><span>{kindLabel} da vedere</span></div>
+            {mixed && (
+              <div className="segmented kind-filter" role="radiogroup" aria-label="Tipo di contenuto">
+                {(["all", "movie", "tv"] as TypeFilter[]).map((k) => (
+                  <button key={k} type="button" role="radio" aria-checked={filters.kind === k} onClick={() => setFilters({ ...filters, kind: k })}>
+                    {k === "all" ? "Tutti" : TYPE_LABEL[k]}
+                    <span className="count">{toWatch.filter(passes({ ...filters, kind: k })).length}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="filter-bar">
               <button className={"glass pill filter-btn" + (activeCount ? " on" : "")} onClick={() => setFiltersOpen(true)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M4 7h16M7 12h10M10 17h4" /></svg>
@@ -663,7 +673,7 @@ function Room({ session, providers, onExit, onSwitch }: {
                   </button>
                 </span>
               ))}
-              {activeCount > 1 && <button className="mini-link clear-all" onClick={() => setFilters(NO_FILTERS)}>Azzera</button>}
+              {activeCount > 1 && <button className="mini-link clear-all" onClick={() => setFilters({ ...NO_FILTERS, kind: filters.kind })}>Azzera</button>}
             </div>
             {toWatchShown.length ? <Grid items={toWatchShown} note={seenWho} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
               <p className="glass panel muted">{
@@ -701,7 +711,7 @@ function Room({ session, providers, onExit, onSwitch }: {
           keep="Annulla" go="Elimina per sempre" onCancel={() => setConfirmDelete(false)} onConfirm={deleteRoom} />
       )}
       {filtersOpen && (
-        <FiltersSheet titles={toWatch} mixed={mixed} initial={filters} seenBySomeone={seenBySomeone}
+        <FiltersSheet titles={toWatch} initial={filters} seenBySomeone={seenBySomeone}
           onClose={() => setFiltersOpen(false)} onApply={(f) => { setFilters(f); setFiltersOpen(false); }} />
       )}
       {round && (
@@ -725,7 +735,8 @@ function Room({ session, providers, onExit, onSwitch }: {
 /* ================= Filtri della lista match ================= */
 interface MatchFilters { kind: TypeFilter; genres: string[]; providers: string[]; unseenOnly: boolean }
 const NO_FILTERS: MatchFilters = { kind: "all", genres: [], providers: [], unseenOnly: false };
-const countFilters = (f: MatchFilters) => (f.kind !== "all" ? 1 : 0) + f.genres.length + f.providers.length + (f.unseenOnly ? 1 : 0);
+// Il tipo (Tutti / Film / Serie) ha il suo selettore sempre visibile: qui conto solo i filtri della pagina Filtri
+const countFilters = (f: MatchFilters) => f.genres.length + f.providers.length + (f.unseenOnly ? 1 : 0);
 
 /** Tra categorie diverse valgono tutti i filtri insieme; dentro la stessa categoria basta uno (es. Commedia O Thriller) */
 function passesFilters(t: Title, f: MatchFilters, seenBySomeone: (t: Title) => boolean) {
@@ -738,15 +749,14 @@ function passesFilters(t: Title, f: MatchFilters, seenBySomeone: (t: Title) => b
 
 function filterChips(f: MatchFilters, provLabel: (p: string) => string) {
   const chips: { id: string; label: string; remove: (f: MatchFilters) => MatchFilters }[] = [];
-  if (f.kind !== "all") chips.push({ id: "k", label: f.kind === "movie" ? "Film" : "Serie", remove: (x) => ({ ...x, kind: "all" }) });
   for (const g of f.genres) chips.push({ id: "g" + g, label: g, remove: (x) => ({ ...x, genres: x.genres.filter((y) => y !== g) }) });
   for (const p of f.providers) chips.push({ id: "p" + p, label: provLabel(p), remove: (x) => ({ ...x, providers: x.providers.filter((y) => y !== p) }) });
   if (f.unseenOnly) chips.push({ id: "u", label: "Mai visti", remove: (x) => ({ ...x, unseenOnly: false }) });
   return chips;
 }
 
-function FiltersSheet({ titles, mixed, initial, seenBySomeone, onClose, onApply }: {
-  titles: Title[]; mixed: boolean; initial: MatchFilters; seenBySomeone: (t: Title) => boolean;
+function FiltersSheet({ titles, initial, seenBySomeone, onClose, onApply }: {
+  titles: Title[]; initial: MatchFilters; seenBySomeone: (t: Title) => boolean;
   onClose: () => void; onApply: (f: MatchFilters) => void;
 }) {
   const [f, setF] = useState<MatchFilters>(initial);
@@ -767,18 +777,7 @@ function FiltersSheet({ titles, mixed, initial, seenBySomeone, onClose, onApply 
     <SheetFrame label="Filtri" onClose={onClose}>
       <div className="stack-m filters-sheet">
         <h2>Filtri</h2>
-        {mixed && (
-          <div className="field">
-            <span className="lbl">Tipo</span>
-            <div className="segmented" role="radiogroup" aria-label="Tipo">
-              {(["all", "movie", "tv"] as TypeFilter[]).map((k) => (
-                <button key={k} type="button" role="radio" aria-checked={f.kind === k} onClick={() => setF({ ...f, kind: k })}>
-                  {k === "all" ? "Tutti" : TYPE_LABEL[k]}<span className="count">{countWith({ ...f, kind: k })}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {f.kind !== "all" && <p className="muted small">Stai guardando solo {f.kind === "movie" ? "i film" : "le serie"}: i numeri tengono conto di questa scelta.</p>}
         {genres.length > 1 && (
           <div className="field">
             <div className="lbl-row"><span className="lbl">Generi</span><span className="hint-inline">Basta uno dei generi scelti</span></div>
@@ -810,7 +809,7 @@ function FiltersSheet({ titles, mixed, initial, seenBySomeone, onClose, onApply 
           </label>
         )}
         <div className="row filters-actions">
-          <button className="btn" onClick={() => setF(NO_FILTERS)} disabled={!countFilters(f)}>Azzera</button>
+          <button className="btn" onClick={() => setF({ ...NO_FILTERS, kind: f.kind })} disabled={!countFilters(f)}>Azzera</button>
           <button className="btn primary" onClick={() => onApply(f)}>{total === 1 ? "Mostra 1 titolo" : `Mostra ${total} titoli`}</button>
         </div>
       </div>
