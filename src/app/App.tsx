@@ -558,22 +558,17 @@ function Room({ session, providers, onExit, onSwitch }: {
     if (ids.length >= members.length) return "L'avevate già visto tutti";
     return `Già visto da ${ids.map(nameOf).join(" e ")}`;
   };
-  // Filtro Tutti / Film / Serie nella lista match: compare solo se la stanza ha film e serie
-  const [kind, setKind] = useState<TypeFilter>("all");
+  // Filtri della lista match (si scelgono nella pagina "Filtri" e restano come chip con la ✕)
+  const [filters, setFilters] = useState<MatchFilters>(NO_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const mixed = meta.filter === "all" || (matches.some((t) => t.type === "movie") && matches.some((t) => t.type === "tv"));
-  const shownKind: TypeFilter = mixed ? kind : "all";
-  const isKind = (t: Title) => shownKind === "all" || t.type === shownKind;
-  // Filtro per genere: i generi che compaiono davvero tra i match (del tipo scelto), dal più frequente
-  const [genre, setGenre] = useState<string | null>(null);
-  const genreCounts = new Map<string, number>();
-  for (const t of toWatch.filter(isKind)) for (const g of t.genres) genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
-  const genreList = [...genreCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "it"));
-  const shownGenre = genre && (genreCounts.has(genre) || matches.some((t) => isWatched(t.key) && isKind(t) && t.genres.includes(genre))) ? genre : null;
-  const isGenre = (t: Title) => !shownGenre || t.genres.includes(shownGenre);
-  const ofKind = (t: Title) => isKind(t) && isGenre(t);
-  const toWatchShown = toWatch.filter(ofKind);
-  const watchedList = matches.filter((t) => isWatched(t.key)).filter(ofKind);
-  const kindLabel = shownKind === "movie" ? "film" : shownKind === "tv" ? "serie" : "match";
+  const seenBySomeone = (t: Title) => (state?.alreadyBy?.[t.key]?.length ?? 0) > 0;
+  const passes = (f: MatchFilters) => (t: Title) => passesFilters(t, f, seenBySomeone);
+  const toWatchShown = toWatch.filter(passes(filters));
+  const watchedList = matches.filter((t) => isWatched(t.key)).filter(passes(filters));
+  const kindLabel = filters.kind === "movie" ? "film" : filters.kind === "tv" ? "serie" : "match";
+  const activeCount = countFilters(filters);
+  const providersLabel = (p: string) => p;
   const alone = members.length < 2;
   const cur = queue[0];
   const ambient = tab === "swipe" ? cur?.poster ?? toWatch[0]?.poster ?? null : toWatch[0]?.poster ?? matches[0]?.poster ?? null;
@@ -639,7 +634,7 @@ function Room({ session, providers, onExit, onSwitch }: {
 
         {tab === "swipe" ? (
           cur ? (
-            <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || confirmLeave || confirmDelete || popups.length > 0}
+            <Swipe key="swipe" queue={queue} paused={!!detail || invite || round || filtersOpen || confirmLeave || confirmDelete || popups.length > 0}
               canUndo={history_.length > 0} onVote={vote} onUndo={undo}
               onOpen={(t) => setDetail({ t, canVote: true })} />
           ) : (
@@ -655,32 +650,24 @@ function Room({ session, providers, onExit, onSwitch }: {
         ) : (
           <section className="stack-m">
             <div className="headline"><span className="big">{toWatchShown.length}</span><span>{kindLabel} da vedere</span></div>
-            {mixed && (
-              <div className="segmented kind-filter" role="radiogroup" aria-label="Mostra">
-                {(["all", "movie", "tv"] as TypeFilter[]).map((f) => (
-                  <button key={f} type="button" role="radio" aria-checked={shownKind === f} onClick={() => setKind(f)}>
-                    {f === "all" ? "Tutti" : TYPE_LABEL[f]}
-                    <span className="count">{toWatch.filter(isGenre).filter((t) => f === "all" || t.type === f).length}</span>
+            <div className="filter-bar">
+              <button className={"glass pill filter-btn" + (activeCount ? " on" : "")} onClick={() => setFiltersOpen(true)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+                Filtri{activeCount ? <span className="badge">{activeCount}</span> : null}
+              </button>
+              {filterChips(filters, providersLabel).map((c) => (
+                <span key={c.id} className="active-chip">
+                  {c.label}
+                  <button onClick={() => setFilters(c.remove)} aria-label={`Togli il filtro ${c.label}`}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden><path d="M7 7l10 10M17 7L7 17" /></svg>
                   </button>
-                ))}
-              </div>
-            )}
-            {genreList.length > 1 && (
-              <div className="genre-filter" role="radiogroup" aria-label="Genere">
-                <button type="button" role="radio" aria-checked={!shownGenre} className="chip nologo small-chip" onClick={() => setGenre(null)}>
-                  Tutti i generi
-                </button>
-                {genreList.map(([g, n]) => (
-                  <button key={g} type="button" role="radio" aria-checked={shownGenre === g} className="chip nologo small-chip"
-                    onClick={() => setGenre(shownGenre === g ? null : g)}>
-                    {g}<span className="count">{n}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+                </span>
+              ))}
+              {activeCount > 1 && <button className="mini-link clear-all" onClick={() => setFilters(NO_FILTERS)}>Azzera</button>}
+            </div>
             {toWatchShown.length ? <Grid items={toWatchShown} note={seenWho} onOpen={(t) => setDetail({ t, canVote: false })} /> : (
               <p className="glass panel muted">{
-                toWatch.length ? `Nessun titolo da vedere con questi filtri: prova “Tutti” o “Tutti i generi”.`
+                toWatch.length ? "Nessun titolo da vedere con questi filtri: togline qualcuno con la ✕."
                 : matches.length ? "Avete visto tutti i vostri match. Fate un nuovo giro per trovarne altri."
                 : "Ancora nessun match. Appena un titolo piace a tutti i presenti comparirà qui, e ve lo segnalo subito."}</p>
             )}
@@ -713,6 +700,10 @@ function Room({ session, providers, onExit, onSwitch }: {
           text={`La stanza${meta.name ? ` “${meta.name}”` : ""} sparirà per tutti i partecipanti, insieme a voti, match e titoli già visti. Non si può annullare.`}
           keep="Annulla" go="Elimina per sempre" onCancel={() => setConfirmDelete(false)} onConfirm={deleteRoom} />
       )}
+      {filtersOpen && (
+        <FiltersSheet titles={toWatch} mixed={mixed} initial={filters} seenBySomeone={seenBySomeone}
+          onClose={() => setFiltersOpen(false)} onApply={(f) => { setFilters(f); setFiltersOpen(false); }} />
+      )}
       {round && (
         <NewRound code={code} member={member} meta={meta} providers={providers} onClose={() => setRound(false)}
           onDone={(r) => { setDeck(r.deck); setMeta(r.meta); setRound(false); setTab("swipe"); setToast(`Aggiunti ${r.added} titoli nuovi`); poll(); }} />
@@ -728,6 +719,102 @@ function Room({ session, providers, onExit, onSwitch }: {
       )}
       {toast && <div className="toast glass" role="status">{toast}</div>}
     </>
+  );
+}
+
+/* ================= Filtri della lista match ================= */
+interface MatchFilters { kind: TypeFilter; genres: string[]; providers: string[]; unseenOnly: boolean }
+const NO_FILTERS: MatchFilters = { kind: "all", genres: [], providers: [], unseenOnly: false };
+const countFilters = (f: MatchFilters) => (f.kind !== "all" ? 1 : 0) + f.genres.length + f.providers.length + (f.unseenOnly ? 1 : 0);
+
+/** Tra categorie diverse valgono tutti i filtri insieme; dentro la stessa categoria basta uno (es. Commedia O Thriller) */
+function passesFilters(t: Title, f: MatchFilters, seenBySomeone: (t: Title) => boolean) {
+  if (f.kind !== "all" && t.type !== f.kind) return false;
+  if (f.genres.length && !f.genres.some((g) => t.genres.includes(g))) return false;
+  if (f.providers.length && !f.providers.some((p) => t.providers.includes(p))) return false;
+  if (f.unseenOnly && seenBySomeone(t)) return false;
+  return true;
+}
+
+function filterChips(f: MatchFilters, provLabel: (p: string) => string) {
+  const chips: { id: string; label: string; remove: (f: MatchFilters) => MatchFilters }[] = [];
+  if (f.kind !== "all") chips.push({ id: "k", label: f.kind === "movie" ? "Film" : "Serie", remove: (x) => ({ ...x, kind: "all" }) });
+  for (const g of f.genres) chips.push({ id: "g" + g, label: g, remove: (x) => ({ ...x, genres: x.genres.filter((y) => y !== g) }) });
+  for (const p of f.providers) chips.push({ id: "p" + p, label: provLabel(p), remove: (x) => ({ ...x, providers: x.providers.filter((y) => y !== p) }) });
+  if (f.unseenOnly) chips.push({ id: "u", label: "Mai visti", remove: (x) => ({ ...x, unseenOnly: false }) });
+  return chips;
+}
+
+function FiltersSheet({ titles, mixed, initial, seenBySomeone, onClose, onApply }: {
+  titles: Title[]; mixed: boolean; initial: MatchFilters; seenBySomeone: (t: Title) => boolean;
+  onClose: () => void; onApply: (f: MatchFilters) => void;
+}) {
+  const [f, setF] = useState<MatchFilters>(initial);
+  // Conteggi "se scegliessi anche questo": per ogni opzione conto i titoli con gli altri filtri già scelti
+  const countWith = (g: MatchFilters) => titles.filter((t) => passesFilters(t, g, seenBySomeone)).length;
+  const tally = (pick: (t: Title) => string[]) => {
+    const m = new Map<string, number>();
+    for (const t of titles) for (const v of pick(t)) m.set(v, (m.get(v) ?? 0) + 1);
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "it")).map(([v]) => v);
+  };
+  const genres = tally((t) => t.genres);
+  const providers = tally((t) => t.providers);
+  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const total = countWith(f);
+  const anySeen = titles.some(seenBySomeone);
+
+  return (
+    <SheetFrame label="Filtri" onClose={onClose}>
+      <div className="stack-m filters-sheet">
+        <h2>Filtri</h2>
+        {mixed && (
+          <div className="field">
+            <span className="lbl">Tipo</span>
+            <div className="segmented" role="radiogroup" aria-label="Tipo">
+              {(["all", "movie", "tv"] as TypeFilter[]).map((k) => (
+                <button key={k} type="button" role="radio" aria-checked={f.kind === k} onClick={() => setF({ ...f, kind: k })}>
+                  {k === "all" ? "Tutti" : TYPE_LABEL[k]}<span className="count">{countWith({ ...f, kind: k })}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {genres.length > 1 && (
+          <div className="field">
+            <div className="lbl-row"><span className="lbl">Generi</span><span className="hint-inline">Basta uno dei generi scelti</span></div>
+            <div className="chips">
+              {genres.map((g) => (
+                <button key={g} type="button" className="chip nologo small-chip" aria-pressed={f.genres.includes(g)} onClick={() => setF({ ...f, genres: toggle(f.genres, g) })}>
+                  {g}<span className="count">{countWith({ ...f, genres: f.genres.includes(g) ? f.genres : [g] })}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {providers.length > 1 && (
+          <div className="field">
+            <div className="lbl-row"><span className="lbl">Piattaforme</span><span className="hint-inline">Basta una delle piattaforme scelte</span></div>
+            <div className="chips">
+              {providers.map((p) => (
+                <button key={p} type="button" className="chip nologo small-chip" aria-pressed={f.providers.includes(p)} onClick={() => setF({ ...f, providers: toggle(f.providers, p) })}>
+                  {p}<span className="count">{countWith({ ...f, providers: f.providers.includes(p) ? f.providers : [p] })}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {anySeen && (
+          <label className="switch-row">
+            <span><b>Solo quelli che nessuno ha già visto</b><span className="muted small">Nasconde i titoli con l&apos;occhio</span></span>
+            <input type="checkbox" role="switch" checked={f.unseenOnly} onChange={(e) => setF({ ...f, unseenOnly: e.target.checked })} />
+          </label>
+        )}
+        <div className="row filters-actions">
+          <button className="btn" onClick={() => setF(NO_FILTERS)} disabled={!countFilters(f)}>Azzera</button>
+          <button className="btn primary" onClick={() => onApply(f)}>{total === 1 ? "Mostra 1 titolo" : `Mostra ${total} titoli`}</button>
+        </div>
+      </div>
+    </SheetFrame>
   );
 }
 

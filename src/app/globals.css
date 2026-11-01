@@ -362,3 +362,25 @@ button:focus-visible, a:focus-visible { outline: 2px solid #fff; outline-offset:
 .seen-chip svg { width: 14px; height: 14px; flex: none; }
 .grid.watched .seen-chip { top: 38px; } /* sotto l'etichetta "Visto ✓" */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Filtri dei match: pulsante, chip attive, pagina ---------- */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filter-btn { color: var(--ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 8px 14px; gap: 7px; }
+.filter-btn svg { width: 18px; height: 18px; }
+.filter-btn.on { background: #fff; color: #000; border-color: #fff; }
+.filter-btn .badge { min-width: 18px; height: 18px; font-size: 11px; }
+.active-chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 5px 5px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: rgba(255,255,255,.14); border: 1px solid var(--stroke); }
+.active-chip button { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: var(--ink); cursor: pointer; padding: 0; }
+.active-chip button svg { width: 12px; height: 12px; }
+.clear-all { padding: 4px 6px; }
+.filters-sheet h2 { padding-right: 44px; }
+.filters-sheet .segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.filters-sheet .count, .chip .count { margin-left: 6px; font-size: 12px; font-weight: 600; opacity: .55; font-variant-numeric: tabular-nums; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,.06); border: 1px solid var(--stroke); cursor: pointer; }
+.switch-row > span { display: grid; gap: 2px; }
+.switch-row input { appearance: none; -webkit-appearance: none; flex: none; width: 51px; height: 31px; border-radius: 999px; background: rgba(120,120,128,.36); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+.switch-row input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); transition: transform .2s; }
+.switch-row input:checked { background: var(--yes); }
+.switch-row input:checked::after { transform: translateX(20px); }
+.filters-actions { position: sticky; bottom: 0; padding-top: 6px; }
